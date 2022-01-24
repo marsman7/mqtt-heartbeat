@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: gcc Aktive Datei kompilieren",
+			"command": "/usr/bin/gcc",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g",
+				"mqtt-heartbeat.c",
+				//"${file}",
+				"-o",
+				"${fileDirname}/bin/${fileBasenameNoExtension}",
+				"-lmosquitto"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "Compiler: /usr/bin/gcc"
+		}
+	]
+}
