@@ -1,1 +1,2 @@
 bin/*
+mqtt-heartbeat.conf

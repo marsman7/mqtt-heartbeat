@@ -6,13 +6,50 @@
 
 #include <stdio.h>
 #include <unistd.h>		// for sleep()
+#include <libconfig.h>
 #include <mosquitto.h>	// for MQTT funtionallity
 
-void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
-{
-	if(message->payloadlen){
+// char *host = "homeserver";
+const char *host = "localhost";
+int port = 1883;
+int interval = 5;
+
+const char *topic = "mars/test";
+
+int configHandler() {
+	config_t cfg;
+
+	// Init .conf file
+	printf("libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
+	config_init(&cfg);
+	
+	/* Read the file. If there is an error, report it and exit. */
+  	if(! config_read_file(&cfg, "mqtt-heartbeat.conf")) {
+		fprintf(stderr, "%s:%d - %s\n", config_error_file(&cfg), config_error_line(&cfg), config_error_text(&cfg));
+		config_destroy(&cfg);
+		return 1;	// (EXIT_FAILURE);	
+	}
+
+	/* Get stored string. */
+	if(config_lookup_string(&cfg, "hostname", &host)){
+		printf("host : %s\n", host);
+	} else {
+		printf("use default hostname : %s\n", host);
+	}
+
+	if (config_lookup_int(&cfg, "port", &port)) {
+		printf("port : %d\n", port);
+	} else {
+		printf("use default port : %d\n", port);
+	}
+	
+	return 0;
+}
+
+void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message) {
+	if(message->payloadlen) {
 		printf("%s %s\n", message->topic, (char*)message->payload);
-	}else{
+	} else {
 		printf("%s (null)\n", message->topic);
 	}
 	fflush(stdout);
@@ -21,11 +58,10 @@ void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	int i;
-	if(!result){
+	if(!result) {
 		/* Subscribe to broker information topics on successful connect. */
-		// mosquitto_subscribe(mosq, NULL, "$SYS/#", 2);
 		mosquitto_subscribe(mosq, NULL, "mars/#", 2);
-	}else{
+	} else {
 		fprintf(stderr, "Connect failed\n");
 	}
 }
@@ -35,7 +71,7 @@ void my_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
 	int i;
 
 	printf("Subscribed (mid: %d): %d", mid, granted_qos[0]);
-	for(i=1; i<qos_count; i++){
+	for(i=1; i<qos_count; i++) {
 		printf(", %d", granted_qos[i]);
 	}
 	printf("\n");
@@ -54,20 +90,22 @@ void my_log_callback(struct mosquitto *mosq, void *userdata, int level, const ch
 
 int main(int argc, char *argv[])
 {
-	int i;
-	char *host = "homeserver";
-	int port = 1883;
 	int keepalive = 60;
 	bool clean_session = true;
 	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
+
+	int err = configHandler();
+	if (err) {
+		return err;
+	}
 
 	mosquitto_lib_init();
 	mosquitto_lib_version(&major, &minor, &revision);
 	printf("Mosquitto Version : %d.%d.%d\n", major, minor, revision);
 
 	mosq = mosquitto_new(NULL, clean_session, NULL);
-	if(!mosq){
+	if(!mosq) {
 		fprintf(stderr, "Error: Out of memory.\n");
 		return 1;
 	}
@@ -77,17 +115,16 @@ int main(int argc, char *argv[])
 	mosquitto_subscribe_callback_set(mosq, my_subscribe_callback);
 	mosquitto_publish_callback_set(mosq, my_publish_callback);
 
-	if(mosquitto_connect(mosq, host, port, keepalive)){
+	if(mosquitto_connect(mosq, host, port, keepalive)) {
 		fprintf(stderr, "Unable to connect.\n");
 		return 1;
 	}
 
 	// mosquitto_loop_forever(mosq, -1, 1);
 	mosquitto_loop_start(mosq);
-	while(1)
-	{
+	while(1) {
 		mosquitto_publish(mosq, NULL, "vscode/test", 8, "marsman", 1, false);
-		sleep(5);
+		sleep(interval);
 	}
 
 	mosquitto_destroy(mosq);

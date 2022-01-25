@@ -8,10 +8,10 @@
 			"args": [
 				"-fdiagnostics-color=always",
 				"-g",
-				"mqtt-heartbeat.c",
-				//"${file}",
+				"${file}",
 				"-o",
 				"${fileDirname}/bin/${fileBasenameNoExtension}",
+				"-lconfig",
 				"-lmosquitto"
 			],
 			"options": {
@@ -20,7 +20,10 @@
 			"problemMatcher": [
 				"$gcc"
 			],
-			"group": "build",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
 			"detail": "Compiler: /usr/bin/gcc"
 		}
 	]
