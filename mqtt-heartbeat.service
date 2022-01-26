@@ -1,0 +1,11 @@
+[Unit]
+Description=Linux service that periodically sends a status message via MQTT
+
+[Service]
+WorkingDirectory=/usr/bin
+ExecStart=/usr/local/mqtt-heartbeat
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

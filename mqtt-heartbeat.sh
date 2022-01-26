@@ -1,10 +1,6 @@
 #!/bin/sh
-# Systemservice start script
-# Name : mqtt-heartbeat-daemon.sh
-
-# install :
-# mv mqtt-heartbeat-daemon.sh /etc/init.d/
-# chmod u+x /etc/init.d/mqtt-heartbeat-daemon.sh
+# Systemservice control script
+# Name : mqtt-heartbeat.sh
 
 DAEMON="/usr/sbin/mqtt-heartbeat"
 test -f $DAEMON || exit 0
