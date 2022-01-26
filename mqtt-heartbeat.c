@@ -3,18 +3,6 @@
  *
  * https://mosquitto.org/api/files/mosquitto-h.html
  *
- *
- * ToDo :
- * - Run as Linux service 
- *     https://github.com/pasce/daemon-skeleton-linux-c
- *     https://openbook.rheinwerk-verlag.de/linux_unix_programmierung/Kap07-011.htm#RxxKap07011040002021F048100
- *     https://www.freedesktop.org/software/systemd/man/daemon.html#New-Style%20Daemons
- * - Config file using
- * - Publish uptime
- *    https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
- * - MQTT LWT (Last Will Testament)
- *     int mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadlen, const void *payload, int qos, bool retain);
- *     Topic : tele/xxx/LWT Online
 /*****************************************************************************/
 
 /***********************************************
@@ -27,14 +15,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <syslog.h>
-#include <stdbool.h>
 #include <libconfig.h>
 #include <mosquitto.h>	// for MQTT funtionallity
 
 /***********************************************
  * Variables
  ***********************************************/
-#define CONFIG_FILE_NAME  "x_mqtt-heartbeat.conf"
+#define CONFIG_FILE_NAME  "mqtt-heartbeat.conf"
 
 const char *host = "localhost";
 int port = 1883;
@@ -45,17 +32,25 @@ const char *message = "Online"; // "{\"POWER\":\"ON\"}";
 
 typedef void (*sighandler_t)(int);
 
+#define errExit(msg) \
+		do { \
+			perror(msg); \
+			exit(EXIT_FAILURE); \
+		} while (0)
+
+
 /***********************************************
  * Read configuration
  ***********************************************/
 int configReader() {
 	config_t cfg;
 
-	printf("libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
+	printf("Config file to use : %s\n", CONFIG_FILE_NAME);
+	//printf("libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
 	config_init(&cfg);
 	
 	// Read the file. If there is an error, report it and exit.
-  	if (! config_read_file(&cfg, CONFIG_FILE_NAME ) ) {
+  	if (! config_read_file(&cfg, CONFIG_FILE_NAME) ) {
 		fprintf(stderr, "Config file error : (%d) %s @ %s:%d\n", \
 				config_error_type(&cfg), config_error_text(&cfg), \
 				config_error_file(&cfg), config_error_line(&cfg));
@@ -79,71 +74,8 @@ int configReader() {
 	return EXIT_SUCCESS;
 }
 
-
 /***********************************************
- * OS signal handler
- ***********************************************/
-static sighandler_t handle_signal (int sig_nr, sighandler_t signalhandler) {
-	struct sigaction neu_sig, alt_sig;
-
-	neu_sig.sa_handler = signalhandler;
-	sigemptyset (&neu_sig.sa_mask);
-	neu_sig.sa_flags = SA_RESTART;
-	if (sigaction (sig_nr, &neu_sig, &alt_sig) < 0) {
-		return SIG_ERR;
-	}
-	return alt_sig.sa_handler;
-}
-
-/***********************************************
- * 
- ***********************************************/
-static void start_daemon (const char *log_name, int facility) {
-	int i;
-	pid_t pid;
-
-	// Elternprozess beenden, somit haben wir einen Waisen
-	// dessen sich jetzt vorerst init annimmt
-	if ( (pid = fork() ) != 0) {
-		exit(EXIT_FAILURE);
-	}
-	
-	// Kindprozess wird zum Sessionführer. Misslingt
-	// dies, kann der Fehler daran liegen, dass der
-	// Prozess bereits Sessionführer ist
-	if ( setsid() < 0 ) {
-		printf("%s kann nicht Sessionführer werden!\n",	log_name);
-		exit(EXIT_FAILURE);
-	}
-	// Signal SIGHUP ignorieren
-	handle_signal (SIGHUP, SIG_IGN);
-
-	// Oder einfach: signal(SIGHUP, SIG_IGN) ...
-	// Das Kind terminieren
-	if ((pid = fork ()) != 0)
-		exit(EXIT_FAILURE);
-
-	// Gründe für das Arbeitsverzeichnis:
-	// + core-Datei wird im aktuellen Arbeitsverzeichnis hinterlegt.
-	// + Damit bei Beendigung mit umount das Dateisystem 
-	//   sicher abgehängt werden kann
-	chdir("/");
-
-	// Damit wir nicht die Bitmaske vom Elternprozess
-	// erben bzw. diese bleibt, stellen wir diese auf 0
-	umask(0);
-
-	// Wir schließen alle geöffneten Filedeskriptoren ...
-	for (i = sysconf (_SC_OPEN_MAX); i > 0; i--)
-		close(i);
-
-	// Da unser Dämonprozess selbst kein Terminal für
-	// die Ausgabe hat....
-	openlog(log_name, LOG_PID | LOG_CONS| LOG_NDELAY, facility);
-}
-
-/***********************************************
- * 
+ * Callback called on incomming message
  ***********************************************/
 void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
 {
@@ -156,7 +88,7 @@ void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 }
 
 /***********************************************
- * 
+ * Callback called
  ***********************************************/
 void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
@@ -209,12 +141,51 @@ void my_log_callback(struct mosquitto *mosq, void *userdata, int level, const ch
  * *********************************************/
 int main(int argc, char *argv[])
 {
+	bool run_as_daemon = false;
 	int keepalive = 30;
 	bool clean_session = true;
 	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
 
 	syslog(LOG_INFO, "mqtt-heartbeat gestartet ...\n");
+
+	/*
+	printf("Argument count: %d\n", argc);
+	for (int i = 0; i < argc; i++) {
+		printf("Argument (%d): %s\n", i, argv[i]);
+	};
+	*/
+	int opt = 0;
+	char *in_fname = NULL;
+	char *out_fname = NULL;
+
+	while ( (opt = getopt(argc, argv, "i:o:d:") ) != -1) {
+		switch(opt) {
+			case 'i':
+				in_fname = optarg;
+				printf("Input option value=%s\n", in_fname);
+				break;
+			case 'o':
+				out_fname = optarg;
+				printf("Output option value=%s\n", out_fname);
+				break;
+			case '?':
+				/* Case when user enters the command as
+				* $ ./cmd_exe -i
+				*/
+				if (optopt == 'i') {
+					printf("Missing mandatory input option\n");
+					/* Case when user enters the command as
+					* # ./cmd_exe -o
+					*/
+				} else if (optopt == 'o') {
+					printf("Missing mandatory output option\n");
+				} else {
+					printf("Invalid option received\n");
+				}
+			break;
+		}
+	}	
 
 	// print the name of this machine
 	char localhostname[256] = "\0";
@@ -224,11 +195,21 @@ int main(int argc, char *argv[])
 	// read parameter from config file
 	int err = configReader();
 	if (err) {
-		syslog(LOG_WARNING, "WARNING Config file I/O, use default settings!\n");
+		syslog(LOG_WARNING, "WARNING: Config file I/O, use default settings!\n");
 	}
+	//printf("Configuration processed ...\n");
 
-	start_daemon ("mqtt-heartbeat-daemon", LOG_LOCAL0);
-	syslog(LOG_NOTICE, "Daemon gestartet ...\n");
+	printf("[pid - %d] running...\n", getpid());
+	//openlog("mqtt-heartbeat-daemon", LOG_PID | LOG_CONS| LOG_NDELAY, LOG_LOCAL0);
+
+	if (run_as_daemon) {
+		// int daemon(int nochdir, int noclose);
+		if (daemon(0, 0) == -1) {
+			errExit("Daemon");
+		}
+		//printf("Daemon gestartet ...\n");
+		syslog(LOG_NOTICE, "Daemon gestartet ...\n");
+	}
 
 	// Init Mosquitto Client
 	mosquitto_lib_init();
@@ -237,8 +218,7 @@ int main(int argc, char *argv[])
 
 	mosq = mosquitto_new(NULL, clean_session, NULL);
 	if(!mosq){
-		//fprintf(stderr, "Error: Out of memory.\n");
-		syslog(LOG_ERR, "ERROR create mosquitto session!\n");
+		syslog(LOG_ERR, "ERROR: create mosquitto session, out of memory!\n");
 		mosquitto_lib_cleanup();
 		closelog();
 		return EXIT_FAILURE;
@@ -252,7 +232,7 @@ int main(int argc, char *argv[])
 
 	if(mosquitto_connect(mosq, host, port, keepalive)){
 		//fprintf(stderr, "Unable to connect.\n");
-		syslog(LOG_ERR, "ERROR Unable to connect mqtt server!\n");
+		syslog(LOG_ERR, "ERROR: Unable to connect mqtt server!\n");
 		mosquitto_destroy(mosq);
 		mosquitto_lib_cleanup();
 		closelog();
@@ -273,20 +253,24 @@ int main(int argc, char *argv[])
       	 *    syslog(LOG_WARNING, "dies_ist_Passiert");
       	 * else if(das_ist_Passiert)
       	 *    syslog(LOG_INFO, "das_ist_Passiert"); 
-       	*/
-      	//syslog(LOG_NOTICE, "Daemon läuft bereits %d Sekunden\n", time );
-      	//break;
+       	 */
+
+		if (run_as_daemon) {
+			syslog(LOG_NOTICE, "Daemon is running ...");
+		} else {
+			syslog(LOG_NOTICE, "is running ...");
+		}
 
 		mosquitto_publish(mosq, NULL, topic, 8, localhostname /* message */, 0, false);
-
 		sleep(5);
+      	//break;
 	}
 
 	// Finish Mosquitto Client
 	mosquitto_destroy(mosq);
 	mosquitto_lib_cleanup();
 
-	syslog(LOG_NOTICE, "Daemon closed ...\n");
+	syslog(LOG_NOTICE, "finished ...\n");
 	closelog();
 	return EXIT_SUCCESS;
 }
