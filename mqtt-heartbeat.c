@@ -147,42 +147,25 @@ int main(int argc, char *argv[])
 	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
 
-	syslog(LOG_INFO, "mqtt-heartbeat gestartet ...\n");
+	syslog(LOG_NOTICE, "start [pid - %d] ...\n", getpid());
+	printf("start [pid - %d] ...\n", getpid());
 
-	/*
-	printf("Argument count: %d\n", argc);
-	for (int i = 0; i < argc; i++) {
-		printf("Argument (%d): %s\n", i, argv[i]);
-	};
-	*/
+	// Parse command line arguments
 	int opt = 0;
-	char *in_fname = NULL;
-	char *out_fname = NULL;
-
-	while ( (opt = getopt(argc, argv, "i:o:d:") ) != -1) {
+	while ( (opt = getopt(argc, argv, "dhx:") ) != -1) {
 		switch(opt) {
-			case 'i':
-				in_fname = optarg;
-				printf("Input option value=%s\n", in_fname);
+			case 'd':
+				printf("Start as daemon\n");
+				run_as_daemon = true;
 				break;
-			case 'o':
-				out_fname = optarg;
-				printf("Output option value=%s\n", out_fname);
+			case 'x':
+				printf("x-option value = '%s'\n", optarg);
+				break;
+			case 'h':
+				printf("Print help\n");
 				break;
 			case '?':
-				/* Case when user enters the command as
-				* $ ./cmd_exe -i
-				*/
-				if (optopt == 'i') {
-					printf("Missing mandatory input option\n");
-					/* Case when user enters the command as
-					* # ./cmd_exe -o
-					*/
-				} else if (optopt == 'o') {
-					printf("Missing mandatory output option\n");
-				} else {
-					printf("Invalid option received\n");
-				}
+				printf("Invalid option '%c'\n", optopt);
 			break;
 		}
 	}	
@@ -199,7 +182,6 @@ int main(int argc, char *argv[])
 	}
 	//printf("Configuration processed ...\n");
 
-	printf("[pid - %d] running...\n", getpid());
 	//openlog("mqtt-heartbeat-daemon", LOG_PID | LOG_CONS| LOG_NDELAY, LOG_LOCAL0);
 
 	if (run_as_daemon) {

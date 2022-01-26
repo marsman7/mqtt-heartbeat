@@ -53,16 +53,16 @@ Filter syslog my message pattern "error"
 
 Linux service Infos
 
-* https://github.com/pasce/daemon-skeleton-linux-c
-* https://openbook.rheinwerk-verlag.de/linux_unix_programmierung/Kap07-011.htm#RxxKap07011040002021F048100
-* https://www.freedesktop.org/software/systemd/man/daemon.html#New-Style%20Daemons 
-* https://www.apt-browse.org/browse/debian/wheezy/main/amd64/initscripts/2.88dsf-41+deb7u1/file/etc/init.d/skeleton
-
 * https://www.delftstack.com/de/howto/c/ac-daemon-in-c/
 * https://lloydrochester.com/post/c/unix-daemon-example/
-* https://manpages.debian.org/testing/manpages-de/systemd.service.5.de.html
+* https://manpages.debian.org/unstable/manpages-de-dev/daemon.3.de.html
 * https://www.man7.org/linux/man-pages/man3/daemon.3.html
-* 
+* https://manpages.debian.org/testing/manpages-de/daemon.7.de.html
+* https://manpages.debian.org/testing/manpages-de/systemd.service.5.de.html
+* https://stackoverflow.com/questions/17954432/creating-a-daemon-in-linux
+    * https://www.apt-browse.org/browse/debian/wheezy/main/amd64/initscripts/2.88dsf-41+deb7u1/file/etc/init.d/skeleton
+    * https://github.com/pasce/daemon-skeleton-linux-c
+
 
 Publish uptime
 
@@ -70,7 +70,7 @@ Publish uptime
 
 Parse Command Line Arguments
 
-* https://www.thegeekstuff.com/2013/01/c-argc-argv/
+* https://manpages.debian.org/unstable/manpages-de-dev/getopt.3.de.html
 
 
 ## About
