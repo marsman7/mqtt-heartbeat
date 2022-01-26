@@ -32,6 +32,17 @@ Copy the compiled binary file
 >`sudo systemctl start mqtt-heartbeat`
 
 
+## Diagnostic
+
+Prints the syslog output from task "mqtt-heartbeat"
+
+>`journalctl -f -t mqtt-heartbeat`
+
+Filter syslog my message pattern "error"
+
+>`journalctl -f -g error --case-sensitive=false`
+
+
 ## About
 
 Marsmans webpage :joy: : [martinsuniverse.de](https://martinsuniverse.de)
