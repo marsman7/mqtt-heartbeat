@@ -23,6 +23,8 @@
  ***********************************************/
 #define CONFIG_FILE_NAME  "mqtt-heartbeat.conf"
 
+bool run_as_daemon = false;
+
 const char *host = "localhost";
 int port = 1883;
 int interval = 5;
@@ -58,18 +60,9 @@ int configReader() {
 		return EXIT_FAILURE;	
 	}
 
-	// Get stored string.
-	if ( config_lookup_string(&cfg, "hostname", &host) ) {
-		printf("host : %s\n", host);
-	} else {
-		printf("use default hostname : %s\n", host);
-	}
-
-	if (config_lookup_int(&cfg, "port", &port)) {
-		printf("port : %d\n", port);
-	} else {
-		printf("use default port : %d\n", port);
-	}
+	// Get stored settings.
+	config_lookup_string(&cfg, "hostname", &host);
+	config_lookup_int(&cfg, "port", &port);
 	
 	return EXIT_SUCCESS;
 }
@@ -88,15 +81,15 @@ void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 }
 
 /***********************************************
- * Callback called
+ * Callback called on change connection status
  ***********************************************/
 void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	int i;
 	if(!result){
-		/* Subscribe to broker information topics on successful connect. */
+		// Subscribe to broker information topics on successful connect.
 		// mosquitto_subscribe(mosq, NULL, "$SYS/#", 2);
-		mosquitto_subscribe(mosq, NULL, "mars/#", 2);
+		mosquitto_subscribe(mosq, NULL, "mars/#", 0);
 	}else{
 		//fprintf(stderr, "Connect failed\n");
 		syslog(LOG_ERR, "ERROR Connect to mqtt server failed!\n");
@@ -127,28 +120,17 @@ void my_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
 }
 
 /***********************************************
- * 
- ***********************************************/
-void my_log_callback(struct mosquitto *mosq, void *userdata, int level, const char *str)
-{
-	// Pring all log messages regardless of level.
-	//printf("Log: %d : %s\n", level, str);
-	syslog(LOG_NOTICE, "Log: %d : %s\n", level, str);
-}
-
-/***********************************************
  * Main
  * *********************************************/
 int main(int argc, char *argv[])
 {
-	bool run_as_daemon = false;
 	int keepalive = 30;
 	bool clean_session = true;
 	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
 
 	syslog(LOG_NOTICE, "start [pid - %d] ...\n", getpid());
-	printf("start [pid - %d] ...\n", getpid());
+	printf("start [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
 
 	// Parse command line arguments
 	int opt = 0;
@@ -158,7 +140,7 @@ int main(int argc, char *argv[])
 				printf("Start as daemon\n");
 				run_as_daemon = true;
 				break;
-			case 'x':
+			case 'x':	// only for testing
 				printf("x-option value = '%s'\n", optarg);
 				break;
 			case 'h':
@@ -193,6 +175,8 @@ int main(int argc, char *argv[])
 		syslog(LOG_NOTICE, "Daemon gestartet ...\n");
 	}
 
+	printf("start [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
+
 	// Init Mosquitto Client
 	mosquitto_lib_init();
 	mosquitto_lib_version(&major, &minor, &revision);
@@ -206,7 +190,6 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	// mosquitto_log_callback_set(mosq, my_log_callback);
 	mosquitto_connect_callback_set(mosq, my_connect_callback);
 	mosquitto_message_callback_set(mosq, my_message_callback);
 	mosquitto_subscribe_callback_set(mosq, my_subscribe_callback);

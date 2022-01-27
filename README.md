@@ -49,9 +49,12 @@ Filter syslog my message pattern "error"
 
 >`journalctl -f -g error --case-sensitive=false`
 
+
+>`ps`
+
 ## Weblinks
 
-Linux service Infos
+####Linux service Infos
 
 * https://www.delftstack.com/de/howto/c/ac-daemon-in-c/
 * https://lloydrochester.com/post/c/unix-daemon-example/
@@ -63,12 +66,20 @@ Linux service Infos
     * https://www.apt-browse.org/browse/debian/wheezy/main/amd64/initscripts/2.88dsf-41+deb7u1/file/etc/init.d/skeleton
     * https://github.com/pasce/daemon-skeleton-linux-c
 
+Verzeichnis ermittel wo die .service Datei hin soll
 
-Publish uptime
+>`pkg-config --variable=systemdsystemunitdir systemd`
+
+Weitere Kommandos
+
+>`systemctl list-unit-files mqtt-heartbeat.service`
+>``
+
+#### Publish uptime
 
 * https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
 
-Parse Command Line Arguments
+#### Parse Command Line Arguments
 
 * https://manpages.debian.org/unstable/manpages-de-dev/getopt.3.de.html
 
