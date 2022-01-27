@@ -18,7 +18,7 @@
 #include <libconfig.h>
 #include <mosquitto.h>	// for MQTT funtionallity
 
-/***********************************************
+/*******************************************//**
  * Variables
  ***********************************************/
 #define CONFIG_FILE_NAME  "mqtt-heartbeat.conf"
@@ -41,7 +41,7 @@ typedef void (*sighandler_t)(int);
 		} while (0)
 
 
-/***********************************************
+/*******************************************//**
  * Read configuration
  ***********************************************/
 int configReader() {
@@ -67,7 +67,7 @@ int configReader() {
 	return EXIT_SUCCESS;
 }
 
-/***********************************************
+/*******************************************//**
  * Callback called on incomming message
  ***********************************************/
 void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
@@ -80,7 +80,7 @@ void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 	fflush(stdout);
 }
 
-/***********************************************
+/*******************************************//**
  * Callback called on change connection status
  ***********************************************/
 void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
@@ -96,7 +96,7 @@ void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 	}
 }
 
-/***********************************************
+/*******************************************//**
  * Callback called on incomming message
  ***********************************************/
 void my_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int qos_count, const int *granted_qos)
@@ -110,7 +110,7 @@ void my_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
 	printf("\n");
 }
 
-/***********************************************
+/*******************************************//**
  * Callback called after outgoing message
  ***********************************************/
 void my_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
@@ -119,7 +119,7 @@ void my_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
 	syslog(LOG_NOTICE, "Message published (mid: %d)\n", mid);
 }
 
-/***********************************************
+/*******************************************//**
  * Main
  * *********************************************/
 int main(int argc, char *argv[])
@@ -128,6 +128,8 @@ int main(int argc, char *argv[])
 	bool clean_session = true;
 	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
+
+	openlog("mqtt-heartbeat-daemon", LOG_PID | LOG_CONS| LOG_NDELAY, LOG_LOCAL0);
 
 	syslog(LOG_NOTICE, "start [pid - %d] ...\n", getpid());
 	printf("start [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
@@ -163,8 +165,6 @@ int main(int argc, char *argv[])
 		syslog(LOG_WARNING, "WARNING: Config file I/O, use default settings!\n");
 	}
 	//printf("Configuration processed ...\n");
-
-	//openlog("mqtt-heartbeat-daemon", LOG_PID | LOG_CONS| LOG_NDELAY, LOG_LOCAL0);
 
 	if (run_as_daemon) {
 		// int daemon(int nochdir, int noclose);

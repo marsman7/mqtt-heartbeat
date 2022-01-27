@@ -8,7 +8,7 @@ OBJECTS  =
 PREFIX	 = ./test/foo/bar
 BINDIR   = $(PREFIX)/usr/local/sbin/
 CONFDIR  = $(PREFIX)/etc/
-SERVICEDIR   = `pkg-config --variable=systemdsystemunitdir systemd`\
+SERVICEDIR   = `pkg-config --variable=systemdsystemunitdir systemd`"\"
 NAME = mqtt-heartbeat
 
 

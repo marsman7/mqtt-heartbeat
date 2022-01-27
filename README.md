@@ -49,12 +49,13 @@ Filter syslog my message pattern "error"
 
 >`journalctl -f -g error --case-sensitive=false`
 
+>`ps <pid>`
 
->`ps`
+>`kill <pid>`
 
 ## Weblinks
 
-####Linux service Infos
+#### Linux service Infos
 
 * https://www.delftstack.com/de/howto/c/ac-daemon-in-c/
 * https://lloydrochester.com/post/c/unix-daemon-example/
@@ -73,7 +74,6 @@ Verzeichnis ermittel wo die .service Datei hin soll
 Weitere Kommandos
 
 >`systemctl list-unit-files mqtt-heartbeat.service`
->``
 
 #### Publish uptime
 

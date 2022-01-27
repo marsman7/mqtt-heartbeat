@@ -16,6 +16,11 @@ int interval = 5;
 
 const char *topic = "mars/test";
 
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
 int configHandler() {
 	config_t cfg;
 
@@ -46,6 +51,13 @@ int configHandler() {
 	return 0;
 }
 
+/**
+ * @brief 
+ * 
+ * @param mosq 
+ * @param userdata 
+ * @param message 
+ */
 void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message) {
 	if(message->payloadlen) {
 		printf("%s %s\n", message->topic, (char*)message->payload);
@@ -55,6 +67,13 @@ void my_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 	fflush(stdout);
 }
 
+/**
+ * @brief 
+ * 
+ * @param mosq 
+ * @param userdata 
+ * @param result 
+ */
 void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	int i;
@@ -66,6 +85,15 @@ void my_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 	}
 }
 
+/**
+ * @brief 
+ * 
+ * @param mosq 
+ * @param userdata 
+ * @param mid 
+ * @param qos_count 
+ * @param granted_qos 
+ */
 void my_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int qos_count, const int *granted_qos)
 {
 	int i;
@@ -77,17 +105,39 @@ void my_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
 	printf("\n");
 }
 
+/**
+ * @brief 
+ * 
+ * @param mosq 
+ * @param userdata 
+ * @param mid 
+ */
 void my_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
 {
 	printf("Published (mid: %d)\n", mid);
 }
 
+/**
+ * @brief 
+ * 
+ * @param mosq 
+ * @param userdata 
+ * @param level 
+ * @param str 
+ */
 void my_log_callback(struct mosquitto *mosq, void *userdata, int level, const char *str)
 {
 	/* Pring all log messages regardless of level. */
 	printf("Log: %d : %s\n", level, str);
 }
 
+/**
+ * @brief 
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int 
+ */
 int main(int argc, char *argv[])
 {
 	int keepalive = 60;
