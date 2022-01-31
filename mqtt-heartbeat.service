@@ -4,6 +4,7 @@
 [Unit]
 Description=service that periodically sends a status message via MQTT
 ; Documentation=man:mqtt-heartbeat.conf(5) man:mqtt-heartbeat(8)
+; Requires=mosquitto.service
 ; After=network-online.target
 ; Wants=network-online.target
 
