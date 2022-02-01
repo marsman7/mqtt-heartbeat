@@ -1,46 +1,82 @@
 # https://www.selflinux.org/selflinux/html/make02.html
 
+NAME     = mqtt-heartbeat
+
 CC       = gcc
 CFLAGS   = -O2 -Wall
-LIBS     = -lconfig -lmosquitto
+LIBS     = 
 INCS     = 
-OBJECTS  = 
+#C_FILES   = foo.c bar.c
+C_FILES  = mqtt-heartbeat.c
+OBJECTS  = $(C_FILES:.c=.o)
+SRCDIR   = src/
+DSTDIR   = bin/
 PREFIX	 = ./test/foo/bar
-BINDIR   = $(PREFIX)/usr/local/sbin/
-CONFDIR  = $(PREFIX)/etc/
-SERVICEDIR   = `pkg-config --variable=systemdsystemunitdir systemd`"\"
-NAME = mqtt-heartbeat
+BINDIR   = /usr/local/sbin/
+CONFDIR  = /etc/
+SERVICEDIR = /etc/systemd/system/
+# SERVICEDIR = `pkg-config --variable=systemdsystemunitdir systemd`/
 
+.PHONY: all
+all: $(OBJECTS)
+	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(CFLAGS) -fdiagnostics-color=always
 
-all: mqtt-heartbeat.o
-	$(CC) -o bin/mqtt-heartbeat bin/mqtt-heartbeat.o $(LIBS) $(CFLAGS) -fdiagnostics-color=always
-
-mqtt-heartbeat.o: mqtt-heartbeat.c
-	$(CC) -c mqtt-heartbeat.c -o bin/mqtt-heartbeat.o $(INCS) $(CFLAGS)
-
-#%.o: %.c
-#	$(CC) -c $<
+%.o: $(SRCDIR)%.c
+	mkdir -p $(DSTDIR)
+	$(CC) -c $< -o $(DSTDIR)$@ $(INCS) $(CFLAGS)
 
 .PHONY: clean
 clean:
-	rm -f bin/*
+#	@ rm -f $(DSTDIR)*
+# remove all files under DSTDIR exept README.md
+	find $(DSTDIR) ! -name 'README.md' -type f -exec rm -f {} +
 
 .PHONY: install
-install: all
-# /usr/local/sbin/foobar 
-# /lib/systemd/system/foobar.service
-# /etc/foobar.conf
-	install -D -m 755 -o root bin/mqtt-heartbeat $(BINDIR)mqtt-heartbeat
-	install -D -m 644 -o root mqtt-heartbeat.example.conf $(CONFDIR)mqtt-heartbeat.conf
-	install -D -m 644 mqtt-heartbeat.service $(SERVICEDIR)mqtt-heartbeat.service
+install: 
+	@ echo "Daemon install  : $(BINDIR)$(NAME)"
+	@ install -D -m 755 $(DSTDIR)$(NAME) $(BINDIR)$(NAME)
+	@ echo "Service install : $(SERVICEDIR)$(NAME).service"
+	@ install -D -m 644 $(SRCDIR)systemd.service $(SERVICEDIR)$(NAME).service
+	@ echo "Config install  : $(CONFDIR)$(NAME).conf"
+	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CONFDIR)$(NAME).conf
+	@ echo 
+	@ echo "Start the daemon : sudo systemctl start $(NAME)"
+	@ echo "Stop the daemon  : sudo systemctl stop $(NAME)"
+	@ echo "Status of daemon : sudo systemctl status $(NAME)"
+
+.PHONY: fakeinstall
+fakeinstall: 
+	@ echo "Daemon install to : $(PREFIX)$(BINDIR)$(NAME)"
+	install -D $(DSTDIR)$(NAME) $(PREFIX)$(BINDIR)$(NAME)
+	@ echo "Service install to : $(PREFIX)$(SERVICEDIR)$(NAME)"
+	install -D $(SRCDIR)systemd.service $(PREFIX)$(SERVICEDIR)$(NAME).service
+	@ echo "Config install  : $(PREFIX)$(CONFDIR)$(NAME).conf"
+	install -D $(SRCDIR)$(NAME).example.conf $(PREFIX)$(CONFDIR)$(NAME).conf
+	tree $(PREFIX)
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(BINDIR)mqtt-heartbeat
-	rm -f $(CONFDIR)mqtt-heartbeat.conf
-	rm -f $(SERVICEDIR)mqtt-heartbeat.service
-	echo $(SERVICEDIR)
+	@ echo "Daemon remove : $(BINDIR)$(NAME)"
+	- rm -f $(BINDIR)$(NAME)
+	@ echo "Service remove : $(SERVICEDIR)$(NAME).service"
+	- rm -f $(SERVICEDIR)$(NAME).service
+	@ echo "Config remove : $(CONFDIR)$(NAME).conf"
+	- rm -f $(CONFDIR)$(NAME).conf
 
 install-strip:
 # Installation mit ge-"strip"-ten Programmen (strip entfernt die Symboltabelle aus einem Programm) 
 
+.PHONY: html
+html:
+	cmark README.md > bin/readme.html
+
+.PHONY: help
+help:
+	@ echo "Help"
+	@ echo ""
+	@ echo "make "
+	@ echo "make clean"
+	@ echo "make install"
+	@ echo "make uninstall"
+	@ echo "make fakeinstall"
+	@ echo "make html"
