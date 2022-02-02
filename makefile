@@ -13,7 +13,7 @@ SRCDIR   = src/
 DSTDIR   = bin/
 PREFIX	 = ./test/foo/bar
 BINDIR   = /usr/local/sbin/
-CONFDIR  = /etc/
+CFGDIR   = /etc/
 SERVICEDIR = /etc/systemd/system/
 # SERVICEDIR = `pkg-config --variable=systemdsystemunitdir systemd`/
 
@@ -37,8 +37,8 @@ install:
 	@ install -D -m 755 $(DSTDIR)$(NAME) $(BINDIR)$(NAME)
 	@ echo "Service install : $(SERVICEDIR)$(NAME).service"
 	@ install -D -m 644 $(SRCDIR)systemd.service $(SERVICEDIR)$(NAME).service
-	@ echo "Config install  : $(CONFDIR)$(NAME).conf"
-	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CONFDIR)$(NAME).conf
+	@ echo "Config install  : $(CFGDIR)$(NAME).conf"
+	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CFGDIR)$(NAME).conf
 	@ echo 
 	@ echo "Start the daemon : sudo systemctl start $(NAME)"
 	@ echo "Stop the daemon  : sudo systemctl stop $(NAME)"
@@ -50,8 +50,8 @@ fakeinstall:
 	install -D $(DSTDIR)$(NAME) $(PREFIX)$(BINDIR)$(NAME)
 	@ echo "Service install to : $(PREFIX)$(SERVICEDIR)$(NAME)"
 	install -D $(SRCDIR)systemd.service $(PREFIX)$(SERVICEDIR)$(NAME).service
-	@ echo "Config install  : $(PREFIX)$(CONFDIR)$(NAME).conf"
-	install -D $(SRCDIR)$(NAME).example.conf $(PREFIX)$(CONFDIR)$(NAME).conf
+	@ echo "Config install  : $(PREFIX)$(CFGDIR)$(NAME).conf"
+	install -D $(SRCDIR)$(NAME).example.conf $(PREFIX)$(CFGDIR)$(NAME).conf
 	tree $(PREFIX)
 
 .PHONY: uninstall
@@ -60,8 +60,8 @@ uninstall:
 	- rm -f $(BINDIR)$(NAME)
 	@ echo "Service remove : $(SERVICEDIR)$(NAME).service"
 	- rm -f $(SERVICEDIR)$(NAME).service
-	@ echo "Config remove : $(CONFDIR)$(NAME).conf"
-	- rm -f $(CONFDIR)$(NAME).conf
+	@ echo "Config remove : $(CFGDIR)$(NAME).conf"
+	- rm -f $(CFGDIR)$(NAME).conf
 
 install-strip:
 # Installation mit ge-"strip"-ten Programmen (strip entfernt die Symboltabelle aus einem Programm) 
