@@ -17,21 +17,21 @@ The following Librarys must be installed for development:
 
 ## Compilation and installation
 
->make
->make install
+>`make`
+
+>`make install`
 
 ## Run as a normal process in a terminal
 
->./mqtt-heartbeat
+>`./mqtt-heartbeat`
 
-## Run as a service daemon
+## Run as a daemon
 
-
-
+Run the daemon once:
 >`sudo systemctl start mqtt-heartbeat`
 
+Configure the daemon to start it as system startup:
 >`sudo systemctl enable mqtt-heartbeat`  
-
 
 ## Diagnostic
 
@@ -41,11 +41,6 @@ Prints the syslog output from task "mqtt-heartbeat"
 
 ## Weblinks
 
-#### Publish uptime
-
-* https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
-
-sysinfo() uptime
 
 ## About
 

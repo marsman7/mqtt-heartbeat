@@ -4,13 +4,14 @@ NAME     = mqtt-heartbeat
 
 CC       = gcc
 CFLAGS   = -O2 -Wall
-LIBS     = 
+LIBS     = -lconfig -lmosquitto
 INCS     = 
 #C_FILES   = foo.c bar.c
 C_FILES  = mqtt-heartbeat.c
 OBJECTS  = $(C_FILES:.c=.o)
 SRCDIR   = src/
 DSTDIR   = bin/
+DOCDIR   = doc/
 PREFIX	 = ./test/foo/bar
 BINDIR   = /usr/local/sbin/
 CFGDIR   = /etc/
@@ -22,7 +23,7 @@ all: $(OBJECTS)
 	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(CFLAGS) -fdiagnostics-color=always
 
 %.o: $(SRCDIR)%.c
-	mkdir -p $(DSTDIR)
+	@ mkdir -p $(DSTDIR)
 	$(CC) -c $< -o $(DSTDIR)$@ $(INCS) $(CFLAGS)
 
 .PHONY: clean
@@ -66,9 +67,11 @@ uninstall:
 install-strip:
 # Installation mit ge-"strip"-ten Programmen (strip entfernt die Symboltabelle aus einem Programm) 
 
-.PHONY: html
-html:
-	cmark README.md > bin/readme.html
+.PHONY: doc
+doc:
+# the following command must be in a line with a && separator else
+# the command run not in the right directory
+	cd $(DOCDIR) && doxygen doxyfile.conf
 
 .PHONY: help
 help:
@@ -79,4 +82,5 @@ help:
 	@ echo "make install"
 	@ echo "make uninstall"
 	@ echo "make fakeinstall"
-	@ echo "make html"
+	@ echo "make doc"
+	@ echo "make help"
