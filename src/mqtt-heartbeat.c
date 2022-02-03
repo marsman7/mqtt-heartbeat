@@ -43,6 +43,7 @@ int interval = 5;
 const char *pub_topic = "tele/%hostname%/STATE";
 const char *message = "Online"; // "{\"POWER\":\"ON\"}";
 const char *sub_topic = "";
+int qos = QOS_MOST_ONCE_DELIVERY;
 
 bool run_main_loop = true;
 int exit_code = EXIT_SUCCESS;
@@ -92,6 +93,13 @@ int configReader()
 					"# The topic of subscribe messages\n"
 					"# default : none\n"
 					"#sub_topic = \"cmd/%%hostname%%/STATE\"\n"
+					"\n"
+					"# Quality of Service Indicator Value 0, 1 or 2 to be used for the will\n"
+					"# QoS 0: At most once delivery\n"
+					"# QoS 1: At least once delivery\n"
+					"# QoS 2: Exactly once delivery\n"
+					"# default : 0\n"
+					"#QoS = 0\n"
 					"\n");
 			fclose(newfile);
 			fprintf(stderr, "<5>create a new config file\n");
@@ -122,6 +130,7 @@ int configReader()
 	config_lookup_string(&cfg, "pub_topic", &pub_topic);
 	config_lookup_int(&cfg, "interval", &interval);
 	config_lookup_string(&cfg, "sub_topic", &sub_topic);
+	config_lookup_int(&cfg, "QoS", &qos);
 
 	config_destroy(&cfg);
 
@@ -136,6 +145,8 @@ int configReader()
  *            an argument on any callbacks.
  * @param result - Connect return code, the values are defined by the MQTT protocol
  *            http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html#_Table_3.1_-
+ * 
+ * @todo #1
  ***********************************************/
 void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
@@ -146,7 +157,7 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 			// Subscribe to broker information topics on successful connect.
 			// mosquitto_subscribe(struct mosquitto *mosq, int *mid, const char *subscribe, int qos);
 			fprintf(stderr, "<6>subscribe : %s\n", sub_topic);
-			mosquitto_subscribe(mosq, NULL, "mars/#", QOS_MOST_ONCE_DELIVERY);
+			mosquitto_subscribe(mosq, NULL, "mars/#", qos);
 		}
 	}
 	else
@@ -219,6 +230,8 @@ void on_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
  * @param argc - Count of command line parameter
  * @param argv - An Array of commend line parameter
  * @return int - Exit Code, Zero at success otherwise -1
+ * 
+ * @todo #2 make QOS on publish editable
  ***********************************************/
 int main(int argc, char *argv[])
 {
@@ -289,7 +302,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
 
 		// int mosquitto_publish(struct mosquitto , mid, topic, payloadlen, payload, qos, retain)
-		mosquitto_publish(mosq, NULL, pub_topic, strlen(localhostname), localhostname /* message */, 0, false);
+		mosquitto_publish(mosq, NULL, pub_topic, strlen(localhostname), localhostname /* message */, qos, false);
 		sleep(interval);
 	}
 
