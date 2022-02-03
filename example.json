@@ -1,17 +1,52 @@
-tele/gosund-F1B93C/STATE {"Time":"2022-01-24T20:45:50","Uptime":"11T07:25:27","UptimeSec":977127,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":36,"POWER1":"ON","POWER2":"ON","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"F0:B0:14:41:D0:3C","Channel":11,"Mode":"11n","RSSI":100,"Signal":-18,"LinkCount":20,"Downtime":"0T00:00:46"}}
-tele/gosund-F1B93C/SENSOR {"Time":"2022-01-24T20:45:50","ENERGY":{"TotalStartTime":"2020-11-10T20:26:57","Total":13.847,"Yesterday":0.053,"Today":0.059,"Period": 1,"Power":15,"ApparentPower":25,"ReactivePower":20,"Factor":0.61,"Voltage":232,"Current":0.107}}
-tele/gosund-148962/STATE {"Time":"2022-01-24T20:45:51","Uptime":"11T07:25:25","UptimeSec":977125,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":42,"POWER1":"OFF","POWER2":"OFF","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"44:4E:6D:5B:FD:E3","Channel":11,"Mode":"11n","RSSI":98,"Signal":-51,"LinkCount":32,"Downtime":"0T00:01:36"}}
-tele/gosund-148962/SENSOR {"Time":"2022-01-24T20:45:51","ENERGY":{"TotalStartTime":"2021-12-24T13:11:38","Total":0.474,"Yesterday":0.026,"Today":0.002,"Period": 0,"Power": 0,"ApparentPower": 0,"ReactivePower": 0,"Factor":0.00,"Voltage": 0,"Current":0.000}}
-tele/gosund-02E65E/STATE {"Time":"2022-01-24T20:45:53","Uptime":"11T07:25:30","UptimeSec":977130,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":25,"POWER1":"ON","POWER2":"OFF","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"F0:B0:14:41:D0:3C","Channel":11,"Mode":"11n","RSSI":100,"Signal":-49,"LinkCount":19,"Downtime":"0T00:00:35"}}
-tele/gosund-02E65E/SENSOR {"Time":"2022-01-24T20:45:53","ENERGY":{"TotalStartTime":"2021-12-24T13:47:56","Total":1.149,"Yesterday":0.050,"Today":0.055,"Period": 1,"Power":14,"ApparentPower":14,"ReactivePower": 0,"Factor":0.99,"Voltage":290,"Current":0.050}}
-tele/gosund-F1BA10/STATE {"Time":"2022-01-24T20:45:54","Uptime":"11T07:25:23","UptimeSec":977123,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":23,"POWER1":"ON","POWER2":"ON","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"F0:B0:14:41:D0:3C","Channel":11,"Mode":"11n","RSSI":66,"Signal":-67,"LinkCount":19,"Downtime":"0T00:00:53"}}
-tele/gosund-F1BA10/SENSOR {"Time":"2022-01-24T20:45:55","ENERGY":{"TotalStartTime":"2020-11-08T21:24:56","Total":16.416,"Yesterday":0.178,"Today":0.197,"Period": 4,"Power":51,"ApparentPower":51,"ReactivePower": 0,"Factor":1.00,"Voltage":221,"Current":0.230}}
-tele/gosund-142070/STATE {"Time":"2022-01-24T20:46:01","Uptime":"11T07:25:30","UptimeSec":977130,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":41,"POWER1":"OFF","POWER2":"OFF","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"44:4E:6D:5B:FD:E3","Channel":11,"Mode":"11n","RSSI":100,"Signal":-43,"LinkCount":27,"Downtime":"0T00:01:26"}}
-tele/gosund-142070/SENSOR {"Time":"2022-01-24T20:46:01","ENERGY":{"TotalStartTime":"2020-12-22T19:29:53","Total":1.687,"Yesterday":0.035,"Today":0.006,"Period": 1,"Power": 0,"ApparentPower": 0,"ReactivePower": 0,"Factor":0.00,"Voltage": 0,"Current":0.000}}
-tele/gosund-14C2C1/STATE {"Time":"2022-01-24T20:46:01","Uptime":"11T07:25:33","UptimeSec":977133,"Heap":28,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":43,"POWER1":"ON","POWER2":"ON","Wifi":{"AP":1,"SSId":"Marsnet","BSSId":"44:4E:6D:5B:FD:E3","Channel":11,"Mode":"11n","RSSI":78,"Signal":-61,"LinkCount":30,"Downtime":"0T00:01:44"}}
-tele/gosund-14C2C1/SENSOR {"Time":"2022-01-24T20:46:01","ENERGY":{"TotalStartTime":"2020-12-22T19:56:42","Total":22.883,"Yesterday":0.164,"Today":0.099,"Period": 0,"Power": 5,"ApparentPower":10,"ReactivePower": 9,"Factor":0.49,"Voltage":284,"Current":0.035}}
+stat/gosund-148962/RESULT {
+    "POWER1": "ON"
+}
 
-stat/gosund-148962/RESULT {"POWER1":"ON"}
 stat/gosund-148962/POWER1 ON
-stat/gosund-148962/RESULT {"POWER1":"OFF"}
+
+stat/gosund-148962/RESULT {
+    "POWER1": "OFF"
+}
+
 stat/gosund-148962/POWER1 OFF
+
+tele/gosund-F1B93C/STATE {
+    "Time": "2022-01-24T20:45:50",
+    "Uptime": "11T07:25:27",
+    "UptimeSec": 977127,
+    "Heap": 28,
+    "SleepMode": "Dynamic",
+    "Sleep": 50,
+    "LoadAvg": 19,
+    "MqttCount": 36,
+    "POWER1": "ON",
+    "POWER2": "ON",
+    "Wifi": {
+        "AP": 1,
+        "SSId": "Marsnet",
+        "BSSId": "F0:B0:14:41:D0:3C",
+        "Channel": 11,
+        "Mode": "11n",
+        "RSSI": 100,
+        "Signal": -18,
+        "LinkCount": 20,
+        "Downtime": "0T00:00:46"
+    }
+}
+
+tele/gosund-F1B93C/SENSOR {
+    "Time": "2022-01-24T20:45:50",
+    "ENERGY": {
+        "TotalStartTime": "2020-11-10T20:26:57",
+        "Total": 13.847,
+        "Yesterday": 0.053,
+        "Today": 0.059,
+        "Period": 1,
+        "Power": 15,
+        "ApparentPower": 25,
+        "ReactivePower": 20,
+        "Factor": 0.61,
+        "Voltage": 232,
+        "Current": 0.107
+    }
+}

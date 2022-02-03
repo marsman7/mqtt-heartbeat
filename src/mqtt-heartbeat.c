@@ -35,17 +35,20 @@ enum qos_t {
 	QOS_EXACTLY_ONCE_DELIVERY = 2,
 };
 
-#define CONFIG_FILE_NAME "mqtt-heartbeat.conf"
+const char *config_file_name = "mqtt-heartbeat.conf";
+const char *err_register_sigaction = "Error while registering the signal handler!\n";
 
 const char *mqtt_broker = "localhost";
 int port = 1883;
 int interval = 5;
-const char *pub_topic = "tele/%hostname%/STATE";
-const char *message = "Online"; // "{\"POWER\":\"ON\"}";
+//const char *pub_topic = "stat/\%hostname\%/POWER";
+const char *pub_topic = "tele/\%hostname\%/STATE";
+const char *pub_message = "{\"POWER\":\"ON\"}";
 const char *sub_topic = "";
 int qos = QOS_MOST_ONCE_DELIVERY;
 
 bool run_main_loop = true;
+bool pause_flag = false; //!< if it set to TRUE the process go to paused
 int exit_code = EXIT_SUCCESS;
 
 typedef void (*sighandler_t)(int);
@@ -57,6 +60,98 @@ typedef void (*sighandler_t)(int);
 	} while (0)
 
 /*******************************************/ /**
+ * @brief Terminate the process
+ * 
+ ***********************************************/
+void lastCall()
+{
+    fprintf(stderr, "<4>teminated with lastCall ...\n");
+    // _exit(EXIT_SUCCESS);
+}
+
+/*******************************************/ /**
+ * @brief Processing of the received signals
+ * 
+ * void my_signal_handler(int sig)
+ * 
+ * @param iSignal : catched signal number
+ ***********************************************/
+void my_signal_handler(int iSignal)
+{
+    fprintf(stderr, "<5>signal : %d\n", iSignal);
+
+    switch (iSignal)
+    {
+    case SIGTERM:
+        // triggert by systemctl stop process
+        fprintf(stderr, "<5>Terminate signal triggered ...\n");
+		run_main_loop = false;
+        //exit(EXIT_SUCCESS);
+        break;
+    case SIGINT:
+        // triggert by pressing Ctrl-C in terminal
+        fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
+        fprintf(stderr, "<4>terminated immediately ...\n");
+		run_main_loop = false;
+		_exit(EXIT_SUCCESS);
+        break;
+    case SIGHUP:
+        // trigger defined in *.service file ExecReload=
+        fprintf(stderr, "<5>Hangup signal triggered ...\n");
+        break;
+    case SIGTSTP:
+        // triggert by pressing Ctrl-C in terminal
+        fprintf(stderr, "<5>Ctrl-Z signal triggered -> process pause ...\n");
+        pause_flag = true;
+        break;
+    case SIGCONT:
+        // trigger by run 'kill -SIGCONT <PID>'
+        fprintf(stderr, "<5>Continue paused process ...\n");
+        pause_flag = false;
+        break;
+    }
+}
+
+/*******************************************/ /**
+ * @brief Initialize signals to be catched
+ * 
+ ***********************************************/
+void init_signal_handler()
+{
+    struct sigaction new_action;
+
+    new_action.sa_handler = my_signal_handler;
+    sigfillset(&new_action.sa_mask);
+    new_action.sa_flags = 0;
+
+    // Register signal handler
+    if ( sigaction(SIGTERM, &new_action, NULL) )
+    {
+        errExit(err_register_sigaction);
+    }
+
+    if (sigaction(SIGHUP, &new_action, NULL) != 0)
+    {
+        errExit(err_register_sigaction);
+    }
+
+    if (sigaction(SIGINT, &new_action, NULL) != 0)
+    {
+        errExit(err_register_sigaction);
+    }
+
+    if (sigaction(SIGTSTP, &new_action, NULL) != 0)
+    {
+        errExit(err_register_sigaction);
+    }
+
+    if (sigaction(SIGCONT, &new_action, NULL) != 0)
+    {
+        errExit(err_register_sigaction);
+    }
+}
+
+/*******************************************/ /**
  * @brief Reads the configuration file or creates it if it is not available
  * 
  * @return int - Result, ZERO at successfully, otherwise -1
@@ -64,14 +159,14 @@ typedef void (*sighandler_t)(int);
 int configReader()
 {
 	fprintf(stderr, "<6>libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
-	fprintf(stderr, "<6>config file to use : %s\n", CONFIG_FILE_NAME);
+	fprintf(stderr, "<6>config file to use : %s\n", config_file_name);
 
 	// check exist the .conf file
 	// Atributes F_OK, R_OK, W_OK, XOK or "OR" linked R_OK|X_OK
-	if (access(CONFIG_FILE_NAME, F_OK))
+	if (access(config_file_name, F_OK))
 	{
 		FILE *newfile;
-		if ( (newfile = fopen(CONFIG_FILE_NAME, "w+")) )
+		if ( (newfile = fopen(config_file_name, "w+")) )
 		{
 			fprintf(newfile,
 					"# Name or IP of the MQTT-broker\n"
@@ -115,7 +210,7 @@ int configReader()
 	config_init(&cfg);
 
 	// Read the file. If there is an error, report it and return.
-	if (!config_read_file(&cfg, CONFIG_FILE_NAME))
+	if (!config_read_file(&cfg, config_file_name))
 	{
 		fprintf(stderr, "<4>Config file error : (%d) %s @ %s:%d\n",
 				config_error_type(&cfg), config_error_text(&cfg),
@@ -241,16 +336,22 @@ int main(int argc, char *argv[])
 	int major, minor, revision;
 
 	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
+	if (getppid() != 1)
+	{
+		fprintf(stderr, "Starting in local only mode. Connections will only be " \
+						"possible from clients running on this machine.\n");
+	}
 
 	// print the name of this machine
 	char localhostname[256] = "\0";
 	gethostname(localhostname, sizeof(localhostname) - 1);
 	fprintf(stderr, "<6>local machine : %s\n", localhostname);
 
-	// Print version of libmosquitto
-	mosquitto_lib_version(&major, &minor, &revision);
-	fprintf(stderr, "<6>Mosquitto Version : %d.%d.%d\n", major, minor, revision);
+    // only called after exit() and not after _exit()
+    atexit(lastCall);
 
+    // Initialize signals to be catched
+    init_signal_handler();
 
 	// read parameter from config file
 	int err = configReader();
@@ -259,6 +360,10 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
 	}
 	fprintf(stderr, "<6>configuration processed ...\n");
+
+	// Print version of libmosquitto
+	mosquitto_lib_version(&major, &minor, &revision);
+	fprintf(stderr, "<6>Mosquitto Version : %d.%d.%d\n", major, minor, revision);
 
 	// Init Mosquitto Client, required for use libmosquitto
 	mosquitto_lib_init();
@@ -299,10 +404,13 @@ int main(int argc, char *argv[])
 	// Main Loop
 	while (run_main_loop)
 	{
-		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
+        if (pause_flag)
+            pause();
 
+		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
 		// int mosquitto_publish(struct mosquitto , mid, topic, payloadlen, payload, qos, retain)
-		mosquitto_publish(mosq, NULL, pub_topic, strlen(localhostname), localhostname /* message */, qos, false);
+		mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_message), pub_message /* message */, qos, false);
+
 		sleep(interval);
 	}
 
