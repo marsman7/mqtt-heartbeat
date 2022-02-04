@@ -26,40 +26,19 @@
 #include <libconfig.h>
 #include <mosquitto.h> // for MQTT funtionallity
 
-/*******************************************/ /**
- * @brief List of Quality of Service levels
- * 
- ***********************************************/
-enum qos_t
-{
-	QOS_MOST_ONCE_DELIVERY = 0,
-	QOS_LEAST_ONCE_DELIVERY = 1,
-	QOS_EXACTLY_ONCE_DELIVERY = 2,
-};
+#include "mqtt-heartbeat.h"
 
 const char *config_file_name = "mqtt-heartbeat.conf";
 const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
 const char *err_out_of_memory = "ERROR : Out of memory!\n";
 
+typedef void (*sighandler_t)(int);
+
 int keepalive = 30;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
 
-const char *mqtt_broker = "localhost";
-int port = 1883;
-int interval = 5;
-char *pub_topic = NULL;
-const char *preset_pub_topic = "foo/\%hostname\%/STATE";
-char *pub_message = NULL;
-const char *preset_pub_message = "{\"POWER\":\"ON\"}";
-char *sub_topic = NULL;
-const char *preset_sub_topic = "cmnd/\%hostname\%/POWER";
-int qos = QOS_MOST_ONCE_DELIVERY;
-
 bool pause_flag = false; /*!< if it set to TRUE the process go to paused,
 							 	 send SIGCONT to continue the process */
-//int exit_code = EXIT_SUCCESS;
-
-typedef void (*sighandler_t)(int);
 
 #define errExit(msg)         \
 	do                       \
@@ -69,17 +48,18 @@ typedef void (*sighandler_t)(int);
 	} while (0)
 
 /*******************************************/ /**
- * @brief Terminate the process
+ * @brief Terminate the process an clean the memory
  * 
  ***********************************************/
 void lastCall()
 {
-	fprintf(stderr, "<6>free : %p, %lu \n", pub_topic, malloc_usable_size(pub_topic));
-	free(pub_topic);
-	free(sub_topic);
+	mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_terminate_message), 
+			pub_terminate_message, qos, false);
 	mosquitto_destroy(mosq);
 	mosquitto_lib_cleanup();
-	fprintf(stderr, "<4>teminated ...\n");
+	free(pub_topic);
+	free(sub_topic);
+	fprintf(stderr, "<4>cleanly teminated ...\n");
 	exit(EXIT_SUCCESS);
 }
 
@@ -279,34 +259,7 @@ int configReader()
 		FILE *newfile;
 		if ((newfile = fopen(config_file_name, "w+")))
 		{
-			fprintf(newfile,
-					"# Name or IP of the MQTT-broker\n"
-					"# default : localhost\n"
-					"#broker = \"localhost\"\n"
-					"\n"
-					"# Broker port\n"
-					"# default : 1883\n"
-					"#port = 1883\n"
-					"\n"
-					"# The topic of published messages\n"
-					"# default : \"tele/%%hostname%%/STATE\"\n"
-					"#pub_topic = \"footele/%%hostname%%/STATE\"\n"
-					"\n"
-					"# Interval of sending status message in seconds\n"
-					"# default : 5\n"
-					"#interval = 5\n"
-					"\n"
-					"# The topic of subscribe messages\n"
-					"# default : none\n"
-					"#preset_sub_topic = \"cmd/%%hostname%%/STATE\"\n"
-					"\n"
-					"# Quality of Service Indicator Value 0, 1 or 2 to be used for the will\n"
-					"# QoS 0: At most once delivery\n"
-					"# QoS 1: At least once delivery\n"
-					"# QoS 2: Exactly once delivery\n"
-					"# default : 0\n"
-					"#QoS = 0\n"
-					"\n");
+			fprintf(newfile, preset_config_file );
 			fclose(newfile);
 			fprintf(stderr, "<5>create a new config file\n");
 		}
@@ -340,6 +293,8 @@ int configReader()
 
 	pub_topic = parse_string(preset_pub_topic);
 	sub_topic = parse_string(preset_sub_topic);
+	pub_terminate_message = (char *)preset_pub_terminate_message;
+	last_will_message = (char *)preset_last_will_message;
 
 	config_destroy(&cfg);
 
@@ -498,6 +453,12 @@ int main(int argc, char *argv[])
 	mosquitto_subscribe_callback_set(mosq, on_subscribe_callback);
 	mosquitto_publish_callback_set(mosq, on_publish_callback);
 
+	// Set the last will must be called before calling mosquitto_connect.
+	// int mosquitto_will_set(mosq, topic, payloadlen, payload, qos, retain);
+	mosquitto_will_set(mosq, preset_last_will_topic, 
+			strlen(last_will_message), last_will_message, 
+			QOS_MOST_ONCE_DELIVERY, false);
+
 	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
 	{
 		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
@@ -520,7 +481,8 @@ int main(int argc, char *argv[])
 
 		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
 		// int mosquitto_publish(struct mosquitto , mid, topic, payloadlen, payload, qos, retain)
-		mosquitto_publish(mosq, NULL, pub_topic, strlen(preset_pub_message), preset_pub_message /* message */, qos, false);
+		mosquitto_publish(mosq, NULL, pub_topic, strlen(preset_pub_message), 
+				preset_pub_message, qos, false);
 
 		sleep(interval);
 	}
