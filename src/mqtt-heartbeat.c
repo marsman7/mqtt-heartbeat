@@ -76,6 +76,7 @@ void lastCall()
 {
 	fprintf(stderr, "<6>free : %p, %lu \n", pub_topic, malloc_usable_size(pub_topic));
 	free(pub_topic);
+	free(sub_topic);
 	mosquitto_destroy(mosq);
 	mosquitto_lib_cleanup();
 	fprintf(stderr, "<4>teminated ...\n");
@@ -338,6 +339,7 @@ int configReader()
 	config_lookup_int(&cfg, "QoS", &qos);
 
 	pub_topic = parse_string(preset_pub_topic);
+	sub_topic = parse_string(preset_sub_topic);
 
 	config_destroy(&cfg);
 
@@ -360,11 +362,11 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 	if (!result)
 	{
 		fprintf(stderr, "<5>connect to mqtt-broker success\n");
-		if (strlen(preset_sub_topic) > 0)
+		if (strlen(sub_topic) > 0)
 		{
 			// Subscribe to broker information topics on successful connect.
 			// mosquitto_subscribe(struct mosquitto *mosq, int *mid, const char *subscribe, int qos);
-			fprintf(stderr, "<6>subscribe : %s\n", preset_sub_topic);
+			fprintf(stderr, "<6>subscribe : %s\n", sub_topic);
 			mosquitto_subscribe(mosq, NULL, "mars/#", qos);
 		}
 	}
