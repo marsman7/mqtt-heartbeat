@@ -22,6 +22,7 @@
 #include <syslog.h>
 #include <string.h>
 #include <stdbool.h>
+#include <malloc.h>
 #include <libconfig.h>
 #include <mosquitto.h> // for MQTT funtionallity
 
@@ -29,34 +30,42 @@
  * @brief List of Quality of Service levels
  * 
  ***********************************************/
-enum qos_t {
+enum qos_t
+{
 	QOS_MOST_ONCE_DELIVERY = 0,
 	QOS_LEAST_ONCE_DELIVERY = 1,
 	QOS_EXACTLY_ONCE_DELIVERY = 2,
 };
 
 const char *config_file_name = "mqtt-heartbeat.conf";
-const char *err_register_sigaction = "Error while registering the signal handler!\n";
+const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
+const char *err_out_of_memory = "ERROR : Out of memory!\n";
+
+int keepalive = 30;
+struct mosquitto *mosq = NULL; //! mosquitto client instance
 
 const char *mqtt_broker = "localhost";
 int port = 1883;
 int interval = 5;
-//const char *pub_topic = "stat/\%hostname\%/POWER";
-const char *pub_topic = "tele/\%hostname\%/STATE";
-const char *pub_message = "{\"POWER\":\"ON\"}";
-const char *sub_topic = "";
+char *pub_topic = NULL;
+const char *preset_pub_topic = "foo/\%hostname\%/STATE";
+char *pub_message = NULL;
+const char *preset_pub_message = "{\"POWER\":\"ON\"}";
+char *sub_topic = NULL;
+const char *preset_sub_topic = "cmnd/\%hostname\%/POWER";
 int qos = QOS_MOST_ONCE_DELIVERY;
 
-bool run_main_loop = true;
-bool pause_flag = false; //!< if it set to TRUE the process go to paused
-int exit_code = EXIT_SUCCESS;
+bool pause_flag = false; /*!< if it set to TRUE the process go to paused,
+							 	 send SIGCONT to continue the process */
+//int exit_code = EXIT_SUCCESS;
 
 typedef void (*sighandler_t)(int);
 
-#define errExit(msg)        \
-	do {                    \
-		perror(msg);        \
-		exit(EXIT_FAILURE); \
+#define errExit(msg)         \
+	do                       \
+	{                        \
+		perror(msg);         \
+		_exit(EXIT_FAILURE); \
 	} while (0)
 
 /*******************************************/ /**
@@ -65,8 +74,12 @@ typedef void (*sighandler_t)(int);
  ***********************************************/
 void lastCall()
 {
-    fprintf(stderr, "<4>teminated with lastCall ...\n");
-    // _exit(EXIT_SUCCESS);
+	fprintf(stderr, "<6>free : %p, %lu \n", pub_topic, malloc_usable_size(pub_topic));
+	free(pub_topic);
+	mosquitto_destroy(mosq);
+	mosquitto_lib_cleanup();
+	fprintf(stderr, "<4>teminated ...\n");
+	exit(EXIT_SUCCESS);
 }
 
 /*******************************************/ /**
@@ -78,38 +91,35 @@ void lastCall()
  ***********************************************/
 void my_signal_handler(int iSignal)
 {
-    fprintf(stderr, "<5>signal : %d\n", iSignal);
+	fprintf(stderr, "<5>signal : %s\n", strsignal(iSignal));
 
-    switch (iSignal)
-    {
-    case SIGTERM:
-        // triggert by systemctl stop process
-        fprintf(stderr, "<5>Terminate signal triggered ...\n");
-		run_main_loop = false;
-        //exit(EXIT_SUCCESS);
-        break;
-    case SIGINT:
-        // triggert by pressing Ctrl-C in terminal
-        fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
-        fprintf(stderr, "<4>terminated immediately ...\n");
-		run_main_loop = false;
-		_exit(EXIT_SUCCESS);
-        break;
-    case SIGHUP:
-        // trigger defined in *.service file ExecReload=
-        fprintf(stderr, "<5>Hangup signal triggered ...\n");
-        break;
-    case SIGTSTP:
-        // triggert by pressing Ctrl-C in terminal
-        fprintf(stderr, "<5>Ctrl-Z signal triggered -> process pause ...\n");
-        pause_flag = true;
-        break;
-    case SIGCONT:
-        // trigger by run 'kill -SIGCONT <PID>'
-        fprintf(stderr, "<5>Continue paused process ...\n");
-        pause_flag = false;
-        break;
-    }
+	switch (iSignal)
+	{
+	case SIGTERM:
+		// triggert by systemctl stop process
+		fprintf(stderr, "<5>Terminate signal triggered ...\n");
+		exit(EXIT_SUCCESS);
+		break;
+	case SIGINT:
+		// triggert by pressing Ctrl-C in terminal
+		fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
+		exit(EXIT_SUCCESS);
+		break;
+	case SIGHUP:
+		// trigger defined in *.service file ExecReload=
+		fprintf(stderr, "<5>Hangup signal triggered ...\n");
+		break;
+	case SIGTSTP:
+		// triggert by pressing Ctrl-C in terminal
+		fprintf(stderr, "<5>Ctrl-Z signal triggered -> process pause ...\n");
+		pause_flag = true;
+		break;
+	case SIGCONT:
+		// trigger by run 'kill -SIGCONT <PID>'
+		fprintf(stderr, "<5>Continue paused process ...\n");
+		pause_flag = false;
+		break;
+	}
 }
 
 /*******************************************/ /**
@@ -118,37 +128,137 @@ void my_signal_handler(int iSignal)
  ***********************************************/
 void init_signal_handler()
 {
-    struct sigaction new_action;
+	struct sigaction new_action;
 
-    new_action.sa_handler = my_signal_handler;
-    sigfillset(&new_action.sa_mask);
-    new_action.sa_flags = 0;
+	new_action.sa_handler = my_signal_handler;
+	sigfillset(&new_action.sa_mask);
+	new_action.sa_flags = 0;
 
-    // Register signal handler
-    if ( sigaction(SIGTERM, &new_action, NULL) )
-    {
-        errExit(err_register_sigaction);
-    }
+	// Register signal handler
+	if (sigaction(SIGTERM, &new_action, NULL))
+	{
+		errExit(err_register_sigaction);
+	}
 
-    if (sigaction(SIGHUP, &new_action, NULL) != 0)
-    {
-        errExit(err_register_sigaction);
-    }
+	if (sigaction(SIGHUP, &new_action, NULL) != 0)
+	{
+		errExit(err_register_sigaction);
+	}
 
-    if (sigaction(SIGINT, &new_action, NULL) != 0)
-    {
-        errExit(err_register_sigaction);
-    }
+	if (sigaction(SIGINT, &new_action, NULL) != 0)
+	{
+		errExit(err_register_sigaction);
+	}
 
-    if (sigaction(SIGTSTP, &new_action, NULL) != 0)
-    {
-        errExit(err_register_sigaction);
-    }
+	if (sigaction(SIGTSTP, &new_action, NULL) != 0)
+	{
+		errExit(err_register_sigaction);
+	}
 
-    if (sigaction(SIGCONT, &new_action, NULL) != 0)
-    {
-        errExit(err_register_sigaction);
-    }
+	if (sigaction(SIGCONT, &new_action, NULL) != 0)
+	{
+		errExit(err_register_sigaction);
+	}
+}
+
+/*******************************************/ /**
+ * @brief Pars a string and exchang the tags.
+ * A Tag must be surrounded with %. For example foo/%bar%/for/%every%
+ * The returnet pointer must be freeing ( free(char*) ).
+ * 
+ * @param src_string - Given incoming string
+ * @return char* - Pointer to parsed string
+ ***********************************************/
+char *parse_string(const char *src_string)
+{
+	// unsigned int size = 0;
+	char *ptemp_src = NULL;
+
+	// Check if a tag is included in the topic and get the begin of the tag
+	ptemp_src = strchr(src_string, '%');
+	if (!ptemp_src)
+	{
+		// topic does not contain tags
+		return (char *)src_string;
+	}
+
+	unsigned int dst_length = 0;
+	unsigned int sub_string_length = 0;
+	char *dst_string = NULL; //! Pointer to destination parsed string
+	bool var_found = false;	//! indicates a valid tag 
+	char tag_value[64] = "\0";
+	char *ptag_value = NULL;
+
+	do
+	{
+		sub_string_length = ptemp_src - src_string;
+		// Check and allocate memory
+		if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
+			if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+			{
+				errExit(err_out_of_memory);
+			}
+		}
+
+		strncat(dst_string + dst_length, src_string, sub_string_length);
+		dst_length += sub_string_length;
+		src_string = ptemp_src + 1; // point to character after tag
+
+		// Search close tag
+		ptemp_src = strchr(src_string, '%');
+		if (!ptemp_src)
+		{
+			// topic does not contain tag
+			return (char *)dst_string;
+		}
+		sub_string_length = ptemp_src - src_string;
+
+		var_found = false;
+		if (strncasecmp("hostname", src_string, sub_string_length) == 0)
+		{
+			gethostname(tag_value, sizeof(tag_value) - 1);
+			sub_string_length = strnlen(tag_value, 63);
+			var_found = true;
+			ptag_value = tag_value;
+		} 
+		else if (strncasecmp("user", src_string, sub_string_length) == 0) 
+		{
+			ptag_value = secure_getenv("USER");
+			sub_string_length = strnlen(ptag_value, 63);
+			var_found = true;
+		}
+
+		if (var_found)
+		{
+			// Check and allocate memory
+			if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
+				if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+				{
+					errExit(err_out_of_memory);
+				}
+			}
+			strncat(dst_string + dst_length, ptag_value, sub_string_length);
+			dst_length += sub_string_length;
+		}
+
+		src_string = ptemp_src + 1; // point to character after tag
+		ptemp_src = strchr(src_string, '%');
+	} while (ptemp_src);
+
+	sub_string_length = strnlen(src_string, 1024);
+	if (sub_string_length)
+	{
+		if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
+			if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+			{
+				errExit(err_out_of_memory);
+			}
+		}
+		strncat(dst_string + dst_length, src_string, sub_string_length);
+		dst_length += sub_string_length;
+	}
+
+	return dst_string;
 }
 
 /*******************************************/ /**
@@ -166,7 +276,7 @@ int configReader()
 	if (access(config_file_name, F_OK))
 	{
 		FILE *newfile;
-		if ( (newfile = fopen(config_file_name, "w+")) )
+		if ((newfile = fopen(config_file_name, "w+")))
 		{
 			fprintf(newfile,
 					"# Name or IP of the MQTT-broker\n"
@@ -187,7 +297,7 @@ int configReader()
 					"\n"
 					"# The topic of subscribe messages\n"
 					"# default : none\n"
-					"#sub_topic = \"cmd/%%hostname%%/STATE\"\n"
+					"#preset_sub_topic = \"cmd/%%hostname%%/STATE\"\n"
 					"\n"
 					"# Quality of Service Indicator Value 0, 1 or 2 to be used for the will\n"
 					"# QoS 0: At most once delivery\n"
@@ -222,10 +332,12 @@ int configReader()
 	// Get stored settings.
 	config_lookup_string(&cfg, "broker", &mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
-	config_lookup_string(&cfg, "pub_topic", &pub_topic);
+	config_lookup_string(&cfg, "pub_topic", &preset_pub_topic);
 	config_lookup_int(&cfg, "interval", &interval);
-	config_lookup_string(&cfg, "sub_topic", &sub_topic);
+	config_lookup_string(&cfg, "preset_sub_topic", &preset_sub_topic);
 	config_lookup_int(&cfg, "QoS", &qos);
+
+	pub_topic = parse_string(preset_pub_topic);
 
 	config_destroy(&cfg);
 
@@ -248,17 +360,18 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 	if (!result)
 	{
 		fprintf(stderr, "<5>connect to mqtt-broker success\n");
-		if (strlen(sub_topic) > 0 ) {
+		if (strlen(preset_sub_topic) > 0)
+		{
 			// Subscribe to broker information topics on successful connect.
 			// mosquitto_subscribe(struct mosquitto *mosq, int *mid, const char *subscribe, int qos);
-			fprintf(stderr, "<6>subscribe : %s\n", sub_topic);
+			fprintf(stderr, "<6>subscribe : %s\n", preset_sub_topic);
 			mosquitto_subscribe(mosq, NULL, "mars/#", qos);
 		}
 	}
 	else
 	{
-		fprintf(stderr, "<3>ERROR : connect to mqtt-broker failed : %s!\n", \
-			mosquitto_connack_string(result) );
+		fprintf(stderr, "<3>ERROR : connect to mqtt-broker failed : %s!\n",
+				mosquitto_connack_string(result));
 	}
 }
 
@@ -330,28 +443,29 @@ void on_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	int keepalive = 30;
-	bool clean_session = true;
-	struct mosquitto *mosq = NULL;
 	int major, minor, revision;
 
 	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
 	if (getppid() != 1)
 	{
-		fprintf(stderr, "Starting in local only mode. Connections will only be " \
+		fprintf(stderr, "Starting in local only mode. Connections will only be "
 						"possible from clients running on this machine.\n");
 	}
+
+	//char path[128] = "\0";
+	//getcwd(path, 128);
+	//fprintf(stderr, "<5>%s : %s\n", argv[0], path);
 
 	// print the name of this machine
 	char localhostname[256] = "\0";
 	gethostname(localhostname, sizeof(localhostname) - 1);
 	fprintf(stderr, "<6>local machine : %s\n", localhostname);
 
-    // only called after exit() and not after _exit()
-    atexit(lastCall);
+	// only called after exit() and not after _exit()
+	atexit(lastCall);
 
-    // Initialize signals to be catched
-    init_signal_handler();
+	// Initialize signals to be catched
+	init_signal_handler();
 
 	// read parameter from config file
 	int err = configReader();
@@ -369,7 +483,7 @@ int main(int argc, char *argv[])
 	mosquitto_lib_init();
 
 	// Create a new client instance.
-	mosq = mosquitto_new(NULL, clean_session, NULL);
+	mosq = mosquitto_new(NULL, true, NULL);
 	if (!mosq)
 	{
 		fprintf(stderr, "<3>ERROR: cant't create mosquitto client, out of memory!\n");
@@ -385,31 +499,26 @@ int main(int argc, char *argv[])
 	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
 	{
 		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
-		exit_code = EXIT_FAILURE;
-		run_main_loop = false;
+		exit(EXIT_FAILURE);
 	}
 
-	if (mosquitto_loop_start(mosq)) 
+	if (mosquitto_loop_start(mosq))
 	{
 		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
-		exit_code = EXIT_FAILURE;
-		run_main_loop = false;
+		exit(EXIT_FAILURE);
 	}
 
-	if (exit_code == EXIT_SUCCESS)
-	{
-		fprintf(stderr, "<5>connected mqtt-broker %s:%d\n", mqtt_broker, port);
-	}
+	fprintf(stderr, "<5>connected mqtt-broker %s:%d\n", mqtt_broker, port);
 
 	// Main Loop
-	while (run_main_loop)
+	while (1)
 	{
-        if (pause_flag)
-            pause();
+		if (pause_flag)
+			pause();
 
 		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
 		// int mosquitto_publish(struct mosquitto , mid, topic, payloadlen, payload, qos, retain)
-		mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_message), pub_message /* message */, qos, false);
+		mosquitto_publish(mosq, NULL, pub_topic, strlen(preset_pub_message), preset_pub_message /* message */, qos, false);
 
 		sleep(interval);
 	}
@@ -419,5 +528,5 @@ int main(int argc, char *argv[])
 	mosquitto_lib_cleanup();
 
 	fprintf(stderr, "<6>finished ...\n");
-	return exit_code;
+	return EXIT_SUCCESS;
 }

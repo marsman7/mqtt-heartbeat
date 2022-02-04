@@ -1,21 +1,24 @@
+// User guide to this file
+// https://code.visualstudio.com/docs/editor/tasks
+// https://code.visualstudio.com/docs/editor/variables-reference
 {
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "cppbuild",
 			"label": "C/C++: gcc Aktive Datei kompilieren",
+			"type": "cppbuild",
 			"command": "/usr/bin/gcc",
 			"args": [
 				"-fdiagnostics-color=always",
-				"-g",
+				"-g3",
 				"${file}",
 				"-o",
-				"${fileDirname}/bin/${fileBasenameNoExtension}",
+				"${cwd}/bin/${fileBasenameNoExtension}",
 				"-lconfig",
 				"-lmosquitto"
 			],
 			"options": {
-				"cwd": "${fileDirname}"
+				"cwd": "${workspaceFolder}"
 			},
 			"problemMatcher": [
 				"$gcc"
@@ -23,6 +26,71 @@
 			"group": {
 				"kind": "build",
 				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always"
+			},
+			"detail": "Compiler: /usr/bin/gcc"
+		},
+		{
+			"label": "my_own_task",
+			"type": "shell",
+			"command": [
+				"echo ${defaultBuildTask} &&",
+				"echo ${config:project_name} &&",
+				"pwd &&",
+				"echo ${cwd} &&",
+				"echo ------------------ &&",
+				"echo ${workspaceFolder} &&",
+				"echo ${workspaceFolderBasename} &&",
+				"echo ${fileWorkspaceFolder} &&",
+				"echo ${relativeFile} &&",
+				"echo ${relativeFileDirname} &&",
+				"echo ${workspaceRoot} &&",
+				"echo ${fileBasename} &&",
+				"echo ${fileBasenameNoExtension} &&",
+				"echo ${fileDirname} &&",
+				"echo ${file} "
+			],
+			"args": [],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"clear": true
+			},
+			"detail": "Compiler: /usr/bin/gcc"
+		},
+		{
+			"label": "C/C++: gcc Aktive Datei kompilieren",
+			"type": "cppbuild",
+			"command": "/usr/bin/gcc",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g3",
+				"${file}",
+				"-o",
+				"${cwd}/bin/${fileBasenameNoExtension}",
+				"-lconfig",
+				"-lmosquitto"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always"
 			},
 			"detail": "Compiler: /usr/bin/gcc"
 		}
