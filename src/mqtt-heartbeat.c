@@ -28,17 +28,14 @@
 
 #include "mqtt-heartbeat.h"
 
-const char *config_file_name = "mqtt-heartbeat.conf";
-const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
-const char *err_out_of_memory = "ERROR : Out of memory!\n";
-
 typedef void (*sighandler_t)(int);
-
+//char *config_file_name = NULL;
+bool pause_flag = false; 	/*!< if it set to TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
 
-bool pause_flag = false; /*!< if it set to TRUE the process go to paused,
-							 	 send SIGCONT to continue the process */
+const char *preset_pub_topic = "tele/\%hostname\%/STATE";
+
 
 #define errExit(msg)         \
 	do                       \
@@ -48,10 +45,11 @@ bool pause_flag = false; /*!< if it set to TRUE the process go to paused,
 	} while (0)
 
 /*******************************************/ /**
- * @brief Terminate the process an clean the memory
- * 
+ * @brief Terminate the process an clean the memory.
+ *        This function is passed to atexit and is 
+ *        only called after exit() and not after _exit().
  ***********************************************/
-void lastCall()
+void clean_exit()
 {
 	mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_terminate_message), 
 			pub_terminate_message, qos, false);
@@ -59,6 +57,7 @@ void lastCall()
 	mosquitto_lib_cleanup();
 	free(pub_topic);
 	free(sub_topic);
+	//free(config_file_name);
 	fprintf(stderr, "<4>cleanly teminated ...\n");
 	exit(EXIT_SUCCESS);
 }
@@ -152,7 +151,11 @@ void init_signal_handler()
  ***********************************************/
 char *parse_string(const char *src_string)
 {
-	// unsigned int size = 0;
+	if (! src_string)
+	{
+		return NULL;
+	}
+
 	char *ptemp_src = NULL;
 
 	// Check if a tag is included in the topic and get the begin of the tag
@@ -181,7 +184,7 @@ char *parse_string(const char *src_string)
 			}
 		}
 
-		strncat(dst_string + dst_length, src_string, sub_string_length);
+		strncat(dst_string, src_string, sub_string_length);
 		dst_length += sub_string_length;
 		src_string = ptemp_src + 1; // point to character after tag
 
@@ -218,7 +221,7 @@ char *parse_string(const char *src_string)
 					errExit(err_out_of_memory);
 				}
 			}
-			strncat(dst_string + dst_length, ptag_value, sub_string_length);
+			strncat(dst_string, ptag_value, sub_string_length);
 			dst_length += sub_string_length;
 		}
 
@@ -235,7 +238,7 @@ char *parse_string(const char *src_string)
 				errExit(err_out_of_memory);
 			}
 		}
-		strncat(dst_string + dst_length, src_string, sub_string_length);
+		strncat(dst_string, src_string, sub_string_length);
 		dst_length += sub_string_length;
 	}
 
@@ -283,6 +286,8 @@ int configReader()
 		return EXIT_FAILURE;
 	}
 
+	fprintf(stderr, "topic : %s\n", preset_pub_topic);
+
 	// Get stored settings.
 	config_lookup_string(&cfg, "broker", &mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
@@ -291,10 +296,14 @@ int configReader()
 	config_lookup_string(&cfg, "preset_sub_topic", &preset_sub_topic);
 	config_lookup_int(&cfg, "QoS", &qos);
 
+	fprintf(stderr, "topic : %s\n", preset_pub_topic);
+
 	pub_topic = parse_string(preset_pub_topic);
 	sub_topic = parse_string(preset_sub_topic);
 	pub_terminate_message = (char *)preset_pub_terminate_message;
 	last_will_message = (char *)preset_last_will_message;
+
+	fprintf(stderr, "topic : %s\n", pub_topic);
 
 	config_destroy(&cfg);
 
@@ -405,24 +414,23 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
 	if (getppid() != 1)
 	{
-		fprintf(stderr, "Starting in local only mode. Connections will only be "
-						"possible from clients running on this machine.\n");
+		fprintf(stderr, "Starting in local only mode by user ID %d privileges.\n", getuid());
 	}
+
+	/*
+	config_file_name = calloc('c', strnlen(argv[0], 256) + strnlen(config_file_ext, 256) + 1);
+	strncat(config_file_name, argv[0], strnlen(argv[0], 256));
+	strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 256));
+	fprintf(stderr, "Config file : %s\n", config_file_name);
+	*/
 
 	//char path[128] = "\0";
 	//getcwd(path, 128);
-	//fprintf(stderr, "<5>%s : %s\n", argv[0], path);
+	//fprintf(stderr, "<5> Arg 0 = %s : CWD = %s\n", argv[0], path);
 
-	// print the name of this machine
-	char localhostname[256] = "\0";
-	gethostname(localhostname, sizeof(localhostname) - 1);
-	fprintf(stderr, "<6>local machine : %s\n", localhostname);
-
-	// only called after exit() and not after _exit()
-	atexit(lastCall);
-
-	// Initialize signals to be catched
-	init_signal_handler();
+	//char localhostname[256] = "\0";
+	//gethostname(localhostname, sizeof(localhostname) - 1);
+	//fprintf(stderr, "<6>local machine : %s\n", localhostname);
 
 	// read parameter from config file
 	int err = configReader();
@@ -431,6 +439,12 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
 	}
 	fprintf(stderr, "<6>configuration processed ...\n");
+
+	fprintf(stderr, "<6>topic : %s\n", pub_topic);
+	_exit(EXIT_SUCCESS);
+
+	// Only called after exit() and not after _exit()
+	atexit(clean_exit);
 
 	// Print version of libmosquitto
 	mosquitto_lib_version(&major, &minor, &revision);
@@ -445,7 +459,7 @@ int main(int argc, char *argv[])
 	{
 		fprintf(stderr, "<3>ERROR: cant't create mosquitto client, out of memory!\n");
 		mosquitto_lib_cleanup();
-		return EXIT_FAILURE;
+		exit(EXIT_FAILURE);
 	}
 
 	mosquitto_connect_callback_set(mosq, on_connect_callback);
@@ -473,6 +487,9 @@ int main(int argc, char *argv[])
 
 	fprintf(stderr, "<5>connected mqtt-broker %s:%d\n", mqtt_broker, port);
 
+	// Initialize signals to be catched
+	init_signal_handler();
+
 	// Main Loop
 	while (1)
 	{
@@ -487,10 +504,8 @@ int main(int argc, char *argv[])
 		sleep(interval);
 	}
 
-	// Finish Mosquitto Client
-	mosquitto_destroy(mosq);
-	mosquitto_lib_cleanup();
-
+	// This code is never executed but when it is, the process 
+	// is cleanly terminated with the function specified in atexit().
 	fprintf(stderr, "<6>finished ...\n");
 	return EXIT_SUCCESS;
 }

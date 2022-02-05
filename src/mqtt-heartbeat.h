@@ -10,6 +10,12 @@ enum qos_t
 	QOS_EXACTLY_ONCE_DELIVERY = 2,
 };
 
+
+const char *config_file_name = "mqtt-heartbeat.conf";
+const char *config_file_ext = ".conf";
+const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
+const char *err_out_of_memory = "ERROR : Out of memory!\n";
+
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
@@ -18,7 +24,7 @@ int port = 1883;
 int interval = 5;
 int qos = QOS_MOST_ONCE_DELIVERY;
 char *pub_topic = NULL;
-const char *preset_pub_topic = "tele/\%hostname\%/STATE";
+//const char *preset_pub_topic = "tele/\%hostname\%/STATE";
 char *pub_message = NULL;
 const char *preset_pub_message = "{\"POWER\":\"ON\"}";
 char *pub_terminate_message = NULL;
