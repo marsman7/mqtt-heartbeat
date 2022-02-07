@@ -19,6 +19,8 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <errno.h>
 #include <syslog.h>
 #include <string.h>
 #include <stdbool.h>
@@ -29,7 +31,7 @@
 #include "mqtt-heartbeat.h"
 
 typedef void (*sighandler_t)(int);
-//char *config_file_name = NULL;
+char *config_file_name = NULL;
 bool pause_flag = false; 	/*!< if it set to TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
@@ -82,6 +84,7 @@ void my_signal_handler(int iSignal)
 		break;
 	case SIGINT:
 		// triggert by pressing Ctrl-C in terminal
+		fflush(stdin);
 		fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
 		exit(EXIT_SUCCESS);
 		break;
@@ -286,8 +289,6 @@ int configReader()
 		return EXIT_FAILURE;
 	}
 
-	fprintf(stderr, "topic : %s\n", preset_pub_topic);
-
 	// Get stored settings.
 	config_lookup_string(&cfg, "broker", &mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
@@ -296,14 +297,10 @@ int configReader()
 	config_lookup_string(&cfg, "preset_sub_topic", &preset_sub_topic);
 	config_lookup_int(&cfg, "QoS", &qos);
 
-	fprintf(stderr, "topic : %s\n", preset_pub_topic);
-
 	pub_topic = parse_string(preset_pub_topic);
 	sub_topic = parse_string(preset_sub_topic);
 	pub_terminate_message = (char *)preset_pub_terminate_message;
 	last_will_message = (char *)preset_last_will_message;
-
-	fprintf(stderr, "topic : %s\n", pub_topic);
 
 	config_destroy(&cfg);
 
@@ -398,53 +395,12 @@ void on_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
 	fprintf(stderr, "\n");
 }
 
-/*******************************************/ /**
- * @brief Main function
- * 
- * @param argc - Count of command line parameter
- * @param argv - An Array of commend line parameter
- * @return int - Exit Code, Zero at success otherwise -1
- * 
- * @todo #2 make QOS on publish editable
+/********************************************//**
+ * @brief Init the connection to MQTT broker
  ***********************************************/
-int main(int argc, char *argv[])
+void init_mosquitto_connection()
 {
 	int major, minor, revision;
-
-	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
-	if (getppid() != 1)
-	{
-		fprintf(stderr, "Starting in local only mode by user ID %d privileges.\n", getuid());
-	}
-
-	/*
-	config_file_name = calloc('c', strnlen(argv[0], 256) + strnlen(config_file_ext, 256) + 1);
-	strncat(config_file_name, argv[0], strnlen(argv[0], 256));
-	strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 256));
-	fprintf(stderr, "Config file : %s\n", config_file_name);
-	*/
-
-	//char path[128] = "\0";
-	//getcwd(path, 128);
-	//fprintf(stderr, "<5> Arg 0 = %s : CWD = %s\n", argv[0], path);
-
-	//char localhostname[256] = "\0";
-	//gethostname(localhostname, sizeof(localhostname) - 1);
-	//fprintf(stderr, "<6>local machine : %s\n", localhostname);
-
-	// read parameter from config file
-	int err = configReader();
-	if (err)
-	{
-		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
-	}
-	fprintf(stderr, "<6>configuration processed ...\n");
-
-	fprintf(stderr, "<6>topic : %s\n", pub_topic);
-	_exit(EXIT_SUCCESS);
-
-	// Only called after exit() and not after _exit()
-	atexit(clean_exit);
 
 	// Print version of libmosquitto
 	mosquitto_lib_version(&major, &minor, &revision);
@@ -484,7 +440,69 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
 		exit(EXIT_FAILURE);
 	}
+}
 
+/*******************************************/ /**
+ * @brief Main function
+ * 
+ * @param argc - Count of command line parameter
+ * @param argv - An Array of commend line parameter
+ * @return int - Exit Code, Zero at success otherwise -1
+ * 
+ * @todo #2 make QOS on publish editable
+ ***********************************************/
+int main(int argc, char *argv[])
+{
+	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
+	if (getppid() != 1)
+	{
+		fprintf(stderr, "<6>Starting in local only mode by user ID %d privileges.\n", getuid());
+	}
+
+	// run only one instance
+	int pid_file = open("/var/run/whatever.pid", O_CREAT | O_RDWR, 0666);
+	int rc = flock(pid_file, LOCK_EX | LOCK_NB);
+	if(rc) {
+		if(EWOULDBLOCK == errno)
+			; // another instance is running
+	}
+	else {
+		// this is the first instance
+	}
+
+	//char cwd[128] = "\0";
+	char *cwd = NULL;
+	cwd = getcwd(NULL, 0);
+	fprintf(stderr, "<6> CWD   : %s\n", cwd);
+	fprintf(stderr, "<6> Arg 0 : %s\n", argv[0]);
+	free(cwd);
+	cwd = NULL;
+
+	config_file_name = calloc('c', strnlen(argv[0], 256) + strnlen(config_file_ext, 256) + 1);
+	strncat(config_file_name, argv[0], strnlen(argv[0], 256));
+	strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 256));
+	fprintf(stderr, "<6>Config file : %s\n", config_file_name);
+
+	//char localhostname[256] = "\0";
+	//gethostname(localhostname, sizeof(localhostname) - 1);
+	//fprintf(stderr, "<6>local machine : %s\n", localhostname);
+
+	// read parameter from config file
+	int err = configReader();
+	if (err)
+	{
+		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
+	}
+	fprintf(stderr, "<6>configuration processed ...\n");
+
+	fprintf(stderr, "<6>topic : %s\n", pub_topic);
+	//_exit(EXIT_SUCCESS);
+
+	// Only called after exit() and not after _exit()
+	atexit(clean_exit);
+
+	// Initialize connetction to MQTT broker
+	init_mosquitto_connection();
 	fprintf(stderr, "<5>connected mqtt-broker %s:%d\n", mqtt_broker, port);
 
 	// Initialize signals to be catched

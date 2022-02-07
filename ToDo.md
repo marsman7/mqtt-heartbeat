@@ -11,9 +11,12 @@
     - Topic : tele/xxx/LWT Online
 * ~~Signalhandler~~
 * Service nur einmal starten
+    - Check and create PID-file
+    - Lock-file in /run/lock : https://cpp.hotexamples.com/de/examples/-/-/lockf/cpp-lockf-function-examples.html
 * ~~Unterstütung von makefile ("make" , "make install" , "make uninstell")~~
 * ~~Doxygen unterstützen https://www.selflinux.org/selflinux/html/doxygen01.html~~
 * Linux Man Pages
+* Log-level adjustable
 * ~~Variables in Topic~~
 * Topic subscribe to shut down the machine
     - https://man7.org/linux/man-pages/man2/reboot.2.html

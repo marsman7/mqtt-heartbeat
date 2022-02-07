@@ -11,7 +11,7 @@ enum qos_t
 };
 
 
-const char *config_file_name = "mqtt-heartbeat.conf";
+//const char *config_file_name = "mqtt-heartbeat.conf";
 const char *config_file_ext = ".conf";
 const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
 const char *err_out_of_memory = "ERROR : Out of memory!\n";
