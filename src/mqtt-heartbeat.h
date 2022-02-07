@@ -10,8 +10,9 @@ enum qos_t
 	QOS_EXACTLY_ONCE_DELIVERY = 2,
 };
 
+const char * lock_socket_name = "/tmp/mqtt-heartbeat";
 
-//const char *config_file_name = "mqtt-heartbeat.conf";
+//const char *config_file_name = "/etc/mqtt-heartbeat.conf";
 const char *config_file_ext = ".conf";
 const char *err_register_sigaction = "ERROR : Registering the signal handler fail!\n";
 const char *err_out_of_memory = "ERROR : Out of memory!\n";
@@ -51,7 +52,7 @@ const char preset_config_file[] =
     "\n"
     "# The topic of published messages\n"
     "# default : \"tele/%%hostname%%/STATE\"\n"
-    "#pub_topic = \"footele/%%hostname%%/STATE\"\n"
+    "#pub_topic = \"tele/%%hostname%%/STATE\"\n"
     "\n"
     "# Interval of sending status message in seconds\n"
     "# default : 5\n"
@@ -59,7 +60,7 @@ const char preset_config_file[] =
     "\n"
     "# The topic of subscribe messages\n"
     "# default : none\n"
-    "#preset_sub_topic = \"cmd/%%hostname%%/STATE\"\n"
+    "#sub_topic = \"cmd/%%hostname%%/STATE\"\n"
     "\n"
     "# Quality of Service Indicator Value 0, 1 or 2 to be used for the will\n"
     "# QoS 0: At most once delivery\n"

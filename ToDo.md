@@ -10,9 +10,7 @@
     - int mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadlen, const void *payload, int qos, bool retain);
     - Topic : tele/xxx/LWT Online
 * ~~Signalhandler~~
-* Service nur einmal starten
-    - Check and create PID-file
-    - Lock-file in /run/lock : https://cpp.hotexamples.com/de/examples/-/-/lockf/cpp-lockf-function-examples.html
+* ~~Service nur einmal starten~~
 * ~~Unterstütung von makefile ("make" , "make install" , "make uninstell")~~
 * ~~Doxygen unterstützen https://www.selflinux.org/selflinux/html/doxygen01.html~~
 * Linux Man Pages

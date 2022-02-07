@@ -6,6 +6,7 @@ BindsTo=mosquitto.service
 
 [Service]
 Type=simple
+; PIDFile=/run/mqtt-heartbeat.pid
 ExecStart=/usr/local/sbin/mqtt-heartbeat
 ExecReload=kill -HUP $MAINPID
 ; ExecStop=/bin/kill -QUIT $MAINPID

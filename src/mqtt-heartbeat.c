@@ -20,6 +20,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <errno.h>
 #include <syslog.h>
 #include <string.h>
@@ -53,13 +55,19 @@ const char *preset_pub_topic = "tele/\%hostname\%/STATE";
  ***********************************************/
 void clean_exit()
 {
+	// Terminate the conection to MQTT broker
 	mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_terminate_message), 
 			pub_terminate_message, qos, false);
 	mosquitto_destroy(mosq);
 	mosquitto_lib_cleanup();
+
+	// Remove link to the socket for run instance only once
+	unlink(lock_socket_name);
+
+	// Free allocated memory
 	free(pub_topic);
 	free(sub_topic);
-	//free(config_file_name);
+
 	fprintf(stderr, "<4>cleanly teminated ...\n");
 	exit(EXIT_SUCCESS);
 }
@@ -67,13 +75,14 @@ void clean_exit()
 /*******************************************/ /**
  * @brief Processing of the received signals
  * 
- * void my_signal_handler(int sig)
+ * void 
+ *signal_handler(int sig)
  * 
  * @param iSignal : catched signal number
  ***********************************************/
-void my_signal_handler(int iSignal)
+void signal_handler(int iSignal)
 {
-	fprintf(stderr, "<5>signal : %s\n", strsignal(iSignal));
+	// fprintf(stderr, "<5>signal : %s\n", strsignal(iSignal));
 
 	switch (iSignal)
 	{
@@ -113,7 +122,7 @@ void init_signal_handler()
 {
 	struct sigaction new_action;
 
-	new_action.sa_handler = my_signal_handler;
+	new_action.sa_handler = signal_handler;
 	sigfillset(&new_action.sa_mask);
 	new_action.sa_flags = 0;
 
@@ -253,7 +262,7 @@ char *parse_string(const char *src_string)
  * 
  * @return int - Result, ZERO at successfully, otherwise -1
  ***********************************************/
-int configReader()
+int read_config()
 {
 	fprintf(stderr, "<6>libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
 	fprintf(stderr, "<6>config file to use : %s\n", config_file_name);
@@ -443,6 +452,45 @@ void init_mosquitto_connection()
 }
 
 /*******************************************/ /**
+ * @brief If this not the first instance, it is terminated
+ ***********************************************/
+void terminate_second_instance()
+{
+    int socket_fd = -1;
+    struct sockaddr_un un_sockaddr = {0};
+    size_t sockaddr_len;
+
+    if ((socket_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
+    {
+        fprintf(stderr, "<3>Could not create socket.\n");
+        _exit(EXIT_FAILURE);
+    }
+
+    un_sockaddr.sun_family = AF_UNIX;
+    strncpy(un_sockaddr.sun_path, lock_socket_name, sizeof(un_sockaddr.sun_path)-1);
+    // use the real sockaddr_length of socket name
+    sockaddr_len = sizeof(un_sockaddr.sun_family) + strlen(lock_socket_name) + 1;
+
+    if ( bind(socket_fd, (struct sockaddr *)&un_sockaddr, sockaddr_len) )
+    {
+        if (errno == EADDRINUSE) 
+		{
+			fprintf(stderr, "<4>An instance is already running, this will be terminated.\n");
+		} 
+		else 
+		{
+			char *errmsg = strerror( errno );
+			fprintf(stderr, "<3>Error on binding socket : %d; %s; %s\n", errno, errmsg, lock_socket_name);
+		}
+		close(socket_fd);
+        _exit(EXIT_FAILURE);
+    } else {
+        //fprintf(stderr, "<6>First instance\n");
+    }
+	close(socket_fd);
+}
+
+/*******************************************/ /**
  * @brief Main function
  * 
  * @param argc - Count of command line parameter
@@ -453,30 +501,20 @@ void init_mosquitto_connection()
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	fprintf(stderr, "<5>process started [pid - %d] [ppid - %d] ...\n", getpid(), getppid());
+	fprintf(stderr, "<4>Process started [PID - %d] [PPID - %d] ...\n", getpid(), getppid());
 	if (getppid() != 1)
 	{
 		fprintf(stderr, "<6>Starting in local only mode by user ID %d privileges.\n", getuid());
 	}
 
-	// run only one instance
-	int pid_file = open("/var/run/whatever.pid", O_CREAT | O_RDWR, 0666);
-	int rc = flock(pid_file, LOCK_EX | LOCK_NB);
-	if(rc) {
-		if(EWOULDBLOCK == errno)
-			; // another instance is running
-	}
-	else {
-		// this is the first instance
-	}
+	// unlink(lock_socket_name);
+	// Allow only one instance and finish each one more
+	terminate_second_instance();
 
-	//char cwd[128] = "\0";
 	char *cwd = NULL;
 	cwd = getcwd(NULL, 0);
 	fprintf(stderr, "<6> CWD   : %s\n", cwd);
 	fprintf(stderr, "<6> Arg 0 : %s\n", argv[0]);
-	free(cwd);
-	cwd = NULL;
 
 	config_file_name = calloc('c', strnlen(argv[0], 256) + strnlen(config_file_ext, 256) + 1);
 	strncat(config_file_name, argv[0], strnlen(argv[0], 256));
@@ -488,22 +526,24 @@ int main(int argc, char *argv[])
 	//fprintf(stderr, "<6>local machine : %s\n", localhostname);
 
 	// read parameter from config file
-	int err = configReader();
+	int err = read_config();
 	if (err)
 	{
 		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
 	}
 	fprintf(stderr, "<6>configuration processed ...\n");
 
+	free(cwd);
+	cwd = NULL;
+
 	fprintf(stderr, "<6>topic : %s\n", pub_topic);
-	//_exit(EXIT_SUCCESS);
 
 	// Only called after exit() and not after _exit()
 	atexit(clean_exit);
 
 	// Initialize connetction to MQTT broker
 	init_mosquitto_connection();
-	fprintf(stderr, "<5>connected mqtt-broker %s:%d\n", mqtt_broker, port);
+	fprintf(stderr, "<5>mqtt-broker connected : %s:%d\n", mqtt_broker, port);
 
 	// Initialize signals to be catched
 	init_signal_handler();
