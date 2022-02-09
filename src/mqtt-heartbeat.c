@@ -22,31 +22,39 @@
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/reboot.h>
+#include <linux/reboot.h>
+#include <linux/limits.h>
 #include <errno.h>
 #include <syslog.h>
 #include <string.h>
 #include <stdbool.h>
 #include <malloc.h>
+#include <getopt.h>		// only for getopt_long() not for getopt()
 #include <libconfig.h>
 #include <mosquitto.h> // for MQTT funtionallity
 
+#include <sys/sysinfo.h>
+
 #include "mqtt-heartbeat.h"
 
+//-----------------------------------------------
+#define errExit(msg) do	{perror(msg); _exit(EXIT_FAILURE); } while (0)
+
+#define MQTT_MAX_MESSAGE_LENGTH 1024
+
+//-----------------------------------------------
 typedef void (*sighandler_t)(int);
 char *config_file_name = NULL;
 bool pause_flag = false; 	/*!< if it set to TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
+int status = STAT_ON;
+char *pub_parsed = NULL;
 
-const char *preset_pub_topic = "tele/\%hostname\%/STATE";
+//-----------------------------------------------
+char *parse_string(const char *, char *);
 
-
-#define errExit(msg)         \
-	do                       \
-	{                        \
-		perror(msg);         \
-		_exit(EXIT_FAILURE); \
-	} while (0)
 
 /*******************************************/ /**
  * @brief Terminate the process an clean the memory.
@@ -55,18 +63,30 @@ const char *preset_pub_topic = "tele/\%hostname\%/STATE";
  ***********************************************/
 void clean_exit()
 {
-	// Terminate the conection to MQTT broker
-	mosquitto_publish(mosq, NULL, pub_topic, strlen(pub_terminate_message), 
-			pub_terminate_message, qos, false);
-	mosquitto_destroy(mosq);
-	mosquitto_lib_cleanup();
+	// Publish a last message, it is not the MQTT "last will"
+	status = STAT_OFF;
+	if (mosq)
+	{
+		pub_parsed = parse_string(tele_pub_message, pub_parsed);
+		mosquitto_publish(mosq, NULL, tele_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
+		usleep(100000);	// sleep 100ms
+
+		// Terminate the conection to MQTT broker
+		mosquitto_destroy(mosq);
+		mosquitto_lib_cleanup();
+	}
 
 	// Remove link to the socket for run instance only once
 	unlink(lock_socket_name);
 
 	// Free allocated memory
-	free(pub_topic);
+	free(stat_pub_topic);
+	free(tele_pub_topic);
+	free(pub_parsed);
 	free(sub_topic);
+	free(last_will_topic);
+	free(last_will_message);
+	free(pub_terminate_message);
 
 	fprintf(stderr, "<4>cleanly teminated ...\n");
 	exit(EXIT_SUCCESS);
@@ -93,7 +113,7 @@ void signal_handler(int iSignal)
 		break;
 	case SIGINT:
 		// triggert by pressing Ctrl-C in terminal
-		fflush(stdin);
+		//fflush(stdin);
 		fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
 		exit(EXIT_SUCCESS);
 		break;
@@ -161,7 +181,7 @@ void init_signal_handler()
  * @param src_string - Given incoming string
  * @return char* - Pointer to parsed string
  ***********************************************/
-char *parse_string(const char *src_string)
+char *parse_string(const char *src_string, char *dst_string)
 {
 	if (! src_string)
 	{
@@ -169,19 +189,25 @@ char *parse_string(const char *src_string)
 	}
 
 	char *ptemp_src = NULL;
+	if (! dst_string) {
+		dst_string = malloc(1); 	// Pointer to destination parsed string
+	}
+	*dst_string = '\0';
+	unsigned int dst_length = 0;
 
 	// Check if a tag is included in the topic and get the begin of the tag
 	ptemp_src = strchr(src_string, '%');
 	if (!ptemp_src)
 	{
 		// topic does not contain tags
-		return (char *)src_string;
+		dst_length = strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH - 1);
+		dst_string = realloc(dst_string, dst_length + 1);
+		strncat(dst_string, src_string, dst_length);
+		return dst_string;
 	}
-
-	unsigned int dst_length = 0;
+	
 	unsigned int sub_string_length = 0;
-	char *dst_string = NULL; //! Pointer to destination parsed string
-	bool var_found = false;	//! indicates a valid tag 
+	bool var_found = false;		// indicates a valid tag 
 	char tag_value[64] = "\0";
 	char *ptag_value = NULL;
 
@@ -189,18 +215,20 @@ char *parse_string(const char *src_string)
 	{
 		sub_string_length = ptemp_src - src_string;
 		// Check and allocate memory
-		if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
-			if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+		size_t requested_size = dst_length + sub_string_length + 1;
+		if (requested_size > malloc_usable_size(dst_string)) {
+			if (!(dst_string = realloc(dst_string, requested_size)))
 			{
 				errExit(err_out_of_memory);
 			}
 		}
 
+		// copy string up to tag '%'
 		strncat(dst_string, src_string, sub_string_length);
-		dst_length += sub_string_length;
-		src_string = ptemp_src + 1; // point to character after tag
+		dst_length = strlen(dst_string);
+		src_string = ptemp_src + 1; // point to character after tag '%'
 
-		// Search close tag
+		// Search close tag to get the attribut name length
 		ptemp_src = strchr(src_string, '%');
 		if (!ptemp_src)
 		{
@@ -213,9 +241,9 @@ char *parse_string(const char *src_string)
 		if (strncasecmp("hostname", src_string, sub_string_length) == 0)
 		{
 			gethostname(tag_value, sizeof(tag_value) - 1);
-			sub_string_length = strnlen(tag_value, 63);
-			var_found = true;
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
 			ptag_value = tag_value;
+			var_found = true;
 		} 
 		else if (strncasecmp("user", src_string, sub_string_length) == 0) 
 		{
@@ -223,35 +251,62 @@ char *parse_string(const char *src_string)
 			sub_string_length = strnlen(ptag_value, 63);
 			var_found = true;
 		}
+		else if (strncasecmp("status", src_string, sub_string_length) == 0) 
+		{
+			if (status)
+			{
+				ptag_value = (char *)status_on_string;
+			}
+			else
+			{
+				ptag_value = (char *)status_off_string;
+			}
+			sub_string_length = strnlen(ptag_value, 63);
+			var_found = true;
+		}
+		else if (strncasecmp("loadavg_1", src_string, sub_string_length) == 0)
+		{
+			double loadavgs[3];
+			getloadavg(loadavgs, 3);
+			sprintf(tag_value, "%d", (int)loadavgs[0]*1000);		
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
+			var_found = true;
+		}
 
 		if (var_found)
 		{
 			// Check and allocate memory
-			if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
-				if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+			size_t requested_size = dst_length + sub_string_length + 1;
+			if (requested_size > malloc_usable_size(dst_string)) {
+				if (!(dst_string = realloc(dst_string, requested_size)))
 				{
 					errExit(err_out_of_memory);
 				}
 			}
 			strncat(dst_string, ptag_value, sub_string_length);
-			dst_length += sub_string_length;
+			dst_length = strlen(dst_string);
 		}
 
 		src_string = ptemp_src + 1; // point to character after tag
 		ptemp_src = strchr(src_string, '%');
 	} while (ptemp_src);
 
-	sub_string_length = strnlen(src_string, 1024);
+	// Check if there is anything left of the string
+	sub_string_length = strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH);
 	if (sub_string_length)
 	{
-		if ((dst_length + sub_string_length + 1) > malloc_usable_size(dst_string)) {
-			if (!(dst_string = realloc(dst_string, dst_length + sub_string_length + 1)))
+		// Check and allocate memory
+		size_t requested_size = dst_length + sub_string_length + 1;
+		if (requested_size > malloc_usable_size(dst_string)) {
+			if (!(dst_string = realloc(dst_string, requested_size)))
 			{
 				errExit(err_out_of_memory);
 			}
 		}
+		// Copy the rest of the string
 		strncat(dst_string, src_string, sub_string_length);
-		dst_length += sub_string_length;
+		dst_length = strlen(dst_string);
 	}
 
 	return dst_string;
@@ -265,7 +320,7 @@ char *parse_string(const char *src_string)
 int read_config()
 {
 	fprintf(stderr, "<6>libconfig Version : %d.%d.%d\n", LIBCONFIG_VER_MAJOR, LIBCONFIG_VER_MINOR, LIBCONFIG_VER_REVISION);
-	fprintf(stderr, "<6>config file to use : %s\n", config_file_name);
+	fprintf(stderr, "<6>Config file to use : %s\n", config_file_name);
 
 	// check exist the .conf file
 	// Atributes F_OK, R_OK, W_OK, XOK or "OR" linked R_OK|X_OK
@@ -276,11 +331,11 @@ int read_config()
 		{
 			fprintf(newfile, preset_config_file );
 			fclose(newfile);
-			fprintf(stderr, "<5>create a new config file\n");
+			fprintf(stderr, "<5>Create a new config file\n");
 		}
 		else
 		{
-			fprintf(stderr, "<3>can't create a new config file\n");
+			fprintf(stderr, "<3>Can't create a new config file\n");
 			return EXIT_FAILURE;
 		}
 	}
@@ -291,7 +346,7 @@ int read_config()
 	// Read the file. If there is an error, report it and return.
 	if (!config_read_file(&cfg, config_file_name))
 	{
-		fprintf(stderr, "<4>Config file error : (%d) %s @ %s:%d\n",
+		fprintf(stderr, "<4>ERROR : Config file read : (%d) %s @ %s:%d\n",
 				config_error_type(&cfg), config_error_text(&cfg),
 				config_error_file(&cfg), config_error_line(&cfg));
 		config_destroy(&cfg);
@@ -301,15 +356,38 @@ int read_config()
 	// Get stored settings.
 	config_lookup_string(&cfg, "broker", &mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
-	config_lookup_string(&cfg, "pub_topic", &preset_pub_topic);
-	config_lookup_int(&cfg, "interval", &interval);
-	config_lookup_string(&cfg, "preset_sub_topic", &preset_sub_topic);
+	config_lookup_int(&cfg, "stat_interval", &stat_interval);
+	config_lookup_string(&cfg, "stat_pub_topic", &preset_stat_pub_topic);
+	config_lookup_string(&cfg, "stat_pub_message", &preset_stat_pub_message);
+	config_lookup_int(&cfg, "tele_interval", &tele_interval);
+	config_lookup_string(&cfg, "tele_pub_topic", &preset_tele_pub_topic);
+	config_lookup_string(&cfg, "tele_pub_message", &preset_tele_pub_message);
+	config_lookup_string(&cfg, "sub_topic", &preset_sub_topic);
 	config_lookup_int(&cfg, "QoS", &qos);
 
-	pub_topic = parse_string(preset_pub_topic);
-	sub_topic = parse_string(preset_sub_topic);
-	pub_terminate_message = (char *)preset_pub_terminate_message;
-	last_will_message = (char *)preset_last_will_message;
+	stat_pub_topic = parse_string(preset_stat_pub_topic, NULL);
+	tele_pub_topic = parse_string(preset_tele_pub_topic, NULL);
+	sub_topic = parse_string(preset_sub_topic, NULL);
+	last_will_topic = parse_string(preset_last_will_topic, NULL);
+	last_will_message = parse_string(preset_last_will_message, NULL);
+	pub_terminate_message = parse_string(preset_pub_terminate_message, NULL);
+
+	if ( ! stat_pub_message )
+	{
+		stat_pub_message = realloc(stat_pub_message, strnlen(preset_stat_pub_message, MQTT_MAX_MESSAGE_LENGTH));
+		*stat_pub_message = '\0';
+	}
+	strncpy(stat_pub_message, preset_stat_pub_message, strnlen(preset_stat_pub_message, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+
+	if ( ! tele_pub_message )
+	{
+		tele_pub_message = realloc(tele_pub_message, strnlen(preset_tele_pub_message, MQTT_MAX_MESSAGE_LENGTH));
+		*tele_pub_message = '\0';
+	}
+	strncpy(tele_pub_message, preset_tele_pub_message, strnlen(preset_tele_pub_message, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+
+	// mosquitto_pub_topic_check
+	// mosquitto_sub_topic_check
 
 	config_destroy(&cfg);
 
@@ -331,54 +409,26 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	if (!result)
 	{
-		fprintf(stderr, "<5>connect to mqtt-broker success\n");
+		fprintf(stderr, "<5>Connect to MQTT-broker success\n");
 		if (strlen(sub_topic) > 0)
 		{
 			// Subscribe to broker information topics on successful connect.
-			// mosquitto_subscribe(struct mosquitto *mosq, int *mid, const char *subscribe, int qos);
-			fprintf(stderr, "<6>subscribe : %s\n", sub_topic);
-			mosquitto_subscribe(mosq, NULL, "mars/#", qos);
+			if (mosquitto_sub_topic_check(sub_topic) == MOSQ_ERR_SUCCESS) 
+			{
+				fprintf(stderr, "<5>Subscribe : %s\n", sub_topic);
+				mosquitto_subscribe(mosq, NULL, sub_topic, qos);
+			}
+			else
+			{
+				fprintf(stderr, "<4>Invalid subscribe topic : %s\n", sub_topic);
+			}
 		}
 	}
 	else
 	{
-		fprintf(stderr, "<3>ERROR : connect to mqtt-broker failed : %s!\n",
+		fprintf(stderr, "<3>ERROR : Connect to MQTT-broker failed : %s!\n",
 				mosquitto_connack_string(result));
 	}
-}
-
-/*******************************************/ /**
- * @brief Trigert by a incomming message
- * 
- * @param mosq - Pointer to a valid mosquitto instance.
- * @param userdata - Defined in mosquitto_new, a pointer to an object that will be 
- *            an argument on any callbacks. 
- * @param message - Struct of received message
- ***********************************************/
-void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
-{
-	if (message->payloadlen)
-	{
-		fprintf(stderr, "<6>mqtt message incomming : %s %s\n", message->topic, (char *)message->payload);
-	}
-	else
-	{
-		fprintf(stderr, "<6>mqtt message incomming : %s (null)\n", message->topic);
-	}
-	fflush(stdout);
-}
-
-/*******************************************/ /**
- * @brief Trigert by a message has been successfully sent (published).
- * 
- * @param mosq - Pointer to a valid mosquitto instance.
- * @param userdata - Defined in mosquitto_new, a pointer to an object that will be 
- *            an argument on any callbacks. 
- * @param mid - The message id of the sent message.
- ***********************************************/
-void on_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
-{
-	fprintf(stderr, "<6>published : (mid: %d)\n", mid);
 }
 
 /*******************************************/ /**
@@ -396,12 +446,70 @@ void on_subscribe_callback(struct mosquitto *mosq, void *userdata, int mid, int 
 {
 	int i;
 
-	fprintf(stderr, "<6>subscribed : (mid: %d): %d", mid, granted_qos[0]);
+	fprintf(stderr, "<6>Subscribed : (mid: %d): %d", mid, granted_qos[0]);
 	for (i = 1; i < qos_count; i++)
 	{
 		fprintf(stderr, ", %d", granted_qos[i]);
 	}
 	fprintf(stderr, "\n");
+}
+
+/*******************************************/ /**
+ * @brief Trigert by a incomming message
+ * 
+ * @param mosq - Pointer to a valid mosquitto instance.
+ * @param userdata - Defined in mosquitto_new, a pointer to an object that will be 
+ *            an argument on any callbacks. 
+ * @param message - Struct of received message
+ ***********************************************/
+void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *message)
+{
+	if (message->payloadlen)
+	{
+		fprintf(stderr, "<6>Message incomming : %s %s\n", message->topic, (char *)message->payload);
+		
+		char **topic_part;
+		int topic_part_count;
+		mosquitto_sub_topic_tokenise(message->topic, &topic_part, &topic_part_count);
+		/*
+		for (int i=0; i<topic_part_count; i++) {
+			fprintf(stderr, "<6>Topic part %d : %s\n", i, topic_part[i]);
+		}
+		*/
+
+		// toggle, off, reboot
+		if ( ! (strcasecmp("cmnd", topic_part[0]))) {
+			if ( ! (strcasecmp("POWER1", topic_part[2]))) {
+				if ( ! strcasecmp("off", message->payload)) {
+					fprintf(stderr, "<4>Shutdown ...\n");
+					// set a flag an shutdown in clean_exit() ???
+					// or will it call automaticly ???
+					// sync();
+					// reboot(LINUX_REBOOT_CMD_POWER_OFF);
+				}
+			}
+		}
+		
+		mosquitto_sub_topic_tokens_free(&topic_part, topic_part_count);
+	}
+	else
+	{
+		fprintf(stderr, "<6>Message incomming : %s (null)\n", message->topic);
+	}
+	fflush(stdout);
+}
+
+/*******************************************/ /**
+ * @brief Trigert by a message has been successfully sent (published).
+ * 
+ * @param mosq - Pointer to a valid mosquitto instance.
+ * @param userdata - Defined in mosquitto_new, a pointer to an object that will be 
+ *            an argument on any callbacks. 
+ * @param mid - The message id of the sent message.
+ ***********************************************/
+void on_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
+{
+	fprintf(stderr, "<6>Successfully published : (mid: %d)\n", mid);
 }
 
 /********************************************//**
@@ -422,7 +530,7 @@ void init_mosquitto_connection()
 	mosq = mosquitto_new(NULL, true, NULL);
 	if (!mosq)
 	{
-		fprintf(stderr, "<3>ERROR: cant't create mosquitto client, out of memory!\n");
+		fprintf(stderr, "<3>ERROR: Can't create mosquitto client!\n");
 		mosquitto_lib_cleanup();
 		exit(EXIT_FAILURE);
 	}
@@ -434,19 +542,19 @@ void init_mosquitto_connection()
 
 	// Set the last will must be called before calling mosquitto_connect.
 	// int mosquitto_will_set(mosq, topic, payloadlen, payload, qos, retain);
-	mosquitto_will_set(mosq, preset_last_will_topic, 
+	mosquitto_will_set(mosq, last_will_topic, 
 			strlen(last_will_message), last_will_message, 
 			QOS_MOST_ONCE_DELIVERY, false);
 
 	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
 	{
-		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
+		fprintf(stderr, "<3>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
 		exit(EXIT_FAILURE);
 	}
 
 	if (mosquitto_loop_start(mosq))
 	{
-		fprintf(stderr, "<3>ERROR: unable to connect mqtt-broker %s:%d\n", mqtt_broker, port);
+		fprintf(stderr, "<3>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
 		exit(EXIT_FAILURE);
 	}
 }
@@ -502,51 +610,111 @@ void terminate_second_instance()
 int main(int argc, char *argv[])
 {
 	fprintf(stderr, "<4>Process started [PID - %d] [PPID - %d] ...\n", getpid(), getppid());
-	if (getppid() != 1)
+	if (getppid() == 1)
 	{
-		fprintf(stderr, "<6>Starting in local only mode by user ID %d privileges.\n", getuid());
+		// run as daemon
+	}
+	else
+	{
+		fprintf(stderr, "<6>Starting not as daemon by user ID %d privileges.\n", getuid());
 	}
 
-	// unlink(lock_socket_name);
+	// Check command line arguments
+	if (argc > 1) {
+		int opt = 0;
+
+		// Parse command line arguments
+		// letter followed by a colon requires an option
+		while ( (opt = getopt_long(argc, argv, "uc:", NULL, NULL)) > 0 ) {
+			switch(opt) {
+				case 'u':
+					fprintf(stderr, "<5>Socket unlinking ...\n");
+					unlink(lock_socket_name);
+					break;
+				case 'c':
+					fprintf(stderr, "<5>config file : %s\n", optarg);
+					config_file_name = optarg;
+					if (strlen(config_file_name) >= PATH_MAX)
+					{
+						fprintf(stderr, "<3>Config file path to long!\n");
+						_exit(EXIT_FAILURE);
+					}
+					break;
+				case '?':
+					fprintf(stderr, "<4>Invalid command line option '%c'\n", optopt);
+					break;
+				case -1:
+					//fprintf(stderr, "<6>Command line argument parsing finished\n");
+					break;
+			}
+		}
+	}	
+
 	// Allow only one instance and finish each one more
 	terminate_second_instance();
 
-	char *cwd = NULL;
-	cwd = getcwd(NULL, 0);
-	fprintf(stderr, "<6> CWD   : %s\n", cwd);
-	fprintf(stderr, "<6> Arg 0 : %s\n", argv[0]);
+	// Only called after exit() and not after _exit()
+	atexit(clean_exit);
 
-	config_file_name = calloc('c', strnlen(argv[0], 256) + strnlen(config_file_ext, 256) + 1);
-	strncat(config_file_name, argv[0], strnlen(argv[0], 256));
-	strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 256));
-	fprintf(stderr, "<6>Config file : %s\n", config_file_name);
+	// if not config file set by commandline, get directory and config file name 
+	if ( ! config_file_name) {
+		fprintf(stderr, "<6>  CWD   : %s\n", getcwd(NULL, 0));
+		fprintf(stderr, "<6>  Arg 0 : %s\n", argv[0]);
+		fprintf(stderr, "<6>  Base  : %s\n", basename(argv[0]));
 
-	//char localhostname[256] = "\0";
-	//gethostname(localhostname, sizeof(localhostname) - 1);
-	//fprintf(stderr, "<6>local machine : %s\n", localhostname);
+		if (getppid() == 1) 
+		{
+			// run as daemon, as config file use system config directory and 
+			// programm name with config file extension
+			char *base_file_name = basename(argv[0]);
+			int config_path_length = strlen(system_config_dir) + strlen(base_file_name) + strlen(config_file_ext);
+			if (config_path_length >= PATH_MAX)
+			{
+				fprintf(stderr, "<3>Config file path to long!\n");
+				exit(EXIT_FAILURE);
+			}
+			config_file_name = malloc(config_path_length + 1);
+			*config_file_name = '\0';
+			strncat(config_file_name, system_config_dir, strnlen(system_config_dir, config_path_length));
+			strncat(config_file_name, base_file_name, strnlen(base_file_name, 
+						config_path_length-strlen(config_file_name)));
+			strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 
+						config_path_length-strlen(config_file_name)));
+		}
+		else
+		{
+			// get the name of programm and expand it with config file extansion
+			int config_path_length = strlen(argv[0]) + strlen(config_file_ext);
+			if (config_path_length >= PATH_MAX)
+			{
+				fprintf(stderr, "<3>Config file path to long!\n");
+				exit(EXIT_FAILURE);
+			}
+			config_file_name = malloc(config_path_length + 1);
+			*config_file_name = '\0';
+			strncat(config_file_name, argv[0], strnlen(argv[0], config_path_length));
+			strncat(config_file_name, config_file_ext, strnlen(config_file_ext, 
+						config_path_length - strlen(config_file_name)));
+		}
+	}
 
 	// read parameter from config file
 	int err = read_config();
 	if (err)
 	{
-		fprintf(stderr, "<4>WARNING: config file I/O error, use default settings!\n");
+		fprintf(stderr, "<4>WARNING: Config file I/O error, use default settings!\n");
 	}
-	fprintf(stderr, "<6>configuration processed ...\n");
-
-	free(cwd);
-	cwd = NULL;
-
-	fprintf(stderr, "<6>topic : %s\n", pub_topic);
-
-	// Only called after exit() and not after _exit()
-	atexit(clean_exit);
+	fprintf(stderr, "<6>Config file processed ...\n");
 
 	// Initialize connetction to MQTT broker
 	init_mosquitto_connection();
-	fprintf(stderr, "<5>mqtt-broker connected : %s:%d\n", mqtt_broker, port);
+	fprintf(stderr, "<5>MQTT-broker connected : %s:%d\n", mqtt_broker, port);
 
 	// Initialize signals to be catched
 	init_signal_handler();
+
+	int stat_couter = stat_interval;
+	int tele_couter = tele_interval;
 
 	// Main Loop
 	while (1)
@@ -554,16 +722,27 @@ int main(int argc, char *argv[])
 		if (pause_flag)
 			pause();
 
-		fprintf(stderr, "<6>sending heartbeat ... %s\n", pub_topic);
-		// int mosquitto_publish(struct mosquitto , mid, topic, payloadlen, payload, qos, retain)
-		mosquitto_publish(mosq, NULL, pub_topic, strlen(preset_pub_message), 
-				preset_pub_message, qos, false);
+		if ( ! stat_couter--) {
+			pub_parsed = parse_string(stat_pub_message, pub_parsed);
+			fprintf(stderr, "<6>Sending status ... \n");
+			//fprintf(stderr, "<6>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
+			mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
+			stat_couter = stat_interval;
+		}
 
-		sleep(interval);
+		if ( ! tele_couter--) {
+			pub_parsed = parse_string(tele_pub_message, pub_parsed);
+			fprintf(stderr, "<6>Sending telemetry ... \n");
+			//fprintf(stderr, "<6>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
+			mosquitto_publish(mosq, NULL, tele_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
+			tele_couter = tele_interval;
+		}
+
+		sleep(1);
 	}
 
 	// This code is never executed but when it is, the process 
 	// is cleanly terminated with the function specified in atexit().
-	fprintf(stderr, "<6>finished ...\n");
+	fprintf(stderr, "<6>Finished ...\n");
 	return EXIT_SUCCESS;
 }

@@ -1,21 +1,25 @@
-* Run as Linux service 
-* Directory of config file
+* ~~Directory of config file~~
+* ~~Run as Linux service per Simple-service~~
 * ~~Create, read and process config file~~
-* Publish status / telemetry
-    - sysinfo() uptime : https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
-    - getloadavg()
-    - memory statistic
 * ~~Send message on terminate ( ? atexit() )~~
-* MQTT LWT (Last Will Testament)
-    - int mosquitto_will_set(struct mosquitto *mosq, const char *topic, int payloadlen, const void *payload, int qos, bool retain);
-    - Topic : tele/xxx/LWT Online
+* ~~MQTT LWT (Last Will Testament)~~
 * ~~Signalhandler~~
 * ~~Service nur einmal starten~~
 * ~~Unterstütung von makefile ("make" , "make install" , "make uninstell")~~
-* ~~Doxygen unterstützen https://www.selflinux.org/selflinux/html/doxygen01.html~~
+* ~~Variables in Topic~~
+* ~~Doxygen unterstützen~~
+* SIGHUP - Config neu laden
 * Linux Man Pages
 * Log-level adjustable
-* ~~Variables in Topic~~
+* Username and password for mqtt connection
+* Publish status / telemetry
+    - stat/# and tele/#
+    - ~~On Status~~
+    - hostname
+    - sysinfo() uptime : https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
+    - CPU load : getloadavg()
+    - RAM : status
+    - HDD : status
 * Topic subscribe to shut down the machine
     - https://man7.org/linux/man-pages/man2/reboot.2.html
     - ```c

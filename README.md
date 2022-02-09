@@ -25,6 +25,13 @@ The following Librarys must be installed for development:
 
 >`./mqtt-heartbeat`
 
+### Command line arguments
+
+| Option | Discription |
+|-----|-----|
+| `-c<file>` | Use the given configuration file |
+| `-u` | Unlink the lock socket that prevent multible instances |
+
 ## Run as a daemon
 
 Run the daemon once:
@@ -38,6 +45,24 @@ Configure the daemon to start it as system startup:
 Prints the syslog output from task "mqtt-heartbeat"
 
 >`journalctl -f -t mqtt-heartbeat`
+
+## MQTT Nachrichten
+
+Subscrib - eingehende MQTT Kommandos
+>`cmnd/foobar/POWER1 <command>`
+
+Mögliche Kommandos sind :
+* `OFF` - Fährt den Rechner runter
+* `REBOOT` - Starten den Rechner neu
+
+Publish - ausgehende MQTT Nachrichten 
+>`stat/foobar/RESULT {"POWER1":"OFF"}`
+>`stat/foobar/POWER1 OFF`
+
+>`tele/foobar/STATE {"POWER1":"OFF","UptimeSec":459441,"Heap":28,"Sleep":50,"LoadAvg":19,"MqttCount":20}`
+
+## Konfiguration
+
 
 ## Weblinks
 

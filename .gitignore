@@ -5,3 +5,5 @@
 !/doc/doxyfile.conf
 /test/*
 mqtt-heartbeat.conf
+*.zip
+*.tar.xz
