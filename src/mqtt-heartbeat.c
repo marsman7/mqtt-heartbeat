@@ -48,6 +48,7 @@ typedef void (*sighandler_t)(int);
 char *config_file_name = NULL;
 bool pause_flag = false; 	/*!< if it set to TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
+char *mqtt_broker = NULL;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
 int status = STAT_ON;
 char *pub_parsed = NULL;
@@ -87,6 +88,7 @@ void clean_exit()
 	free(last_will_topic);
 	free(last_will_message);
 	free(pub_terminate_message);
+	free(mqtt_broker);
 
 	fprintf(stderr, "<4>cleanly teminated ...\n");
 	exit(EXIT_SUCCESS);
@@ -354,7 +356,7 @@ int read_config()
 	}
 
 	// Get stored settings.
-	config_lookup_string(&cfg, "broker", &mqtt_broker);
+	config_lookup_string(&cfg, "broker", &preset_mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
 	config_lookup_int(&cfg, "stat_interval", &stat_interval);
 	config_lookup_string(&cfg, "stat_pub_topic", &preset_stat_pub_topic);
@@ -385,6 +387,14 @@ int read_config()
 		*tele_pub_message = '\0';
 	}
 	strncpy(tele_pub_message, preset_tele_pub_message, strnlen(preset_tele_pub_message, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+
+	if ( ! mqtt_broker )
+	{
+		mqtt_broker = realloc(mqtt_broker, strnlen(preset_mqtt_broker, 128));
+		*mqtt_broker = '\0';
+	}
+	strncpy(mqtt_broker, preset_mqtt_broker, strnlen(preset_mqtt_broker, 128-1)+1);
+
 
 	// mosquitto_pub_topic_check
 	// mosquitto_sub_topic_check
@@ -729,7 +739,7 @@ int main(int argc, char *argv[])
 		if (pause_flag)
 			pause();
 
-		if ( ! stat_couter--) {
+		if ( (! stat_couter--) && (stat_interval > 0)) {
 			pub_parsed = parse_string(stat_pub_message, pub_parsed);
 			fprintf(stderr, "<6>Sending status ... \n");
 			//fprintf(stderr, "<6>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
@@ -737,7 +747,7 @@ int main(int argc, char *argv[])
 			stat_couter = stat_interval;
 		}
 
-		if ( ! tele_couter--) {
+		if ( (! tele_couter--) && (tele_interval > 0)) {
 			pub_parsed = parse_string(tele_pub_message, pub_parsed);
 			fprintf(stderr, "<6>Sending telemetry ... \n");
 			//fprintf(stderr, "<6>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);

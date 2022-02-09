@@ -28,7 +28,7 @@ const char *status_on_string = "ON";
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
-const char *mqtt_broker = "localhost";
+const char *preset_mqtt_broker = "localhost";
 int port = 1883;
 int qos = QOS_MOST_ONCE_DELIVERY;
 
