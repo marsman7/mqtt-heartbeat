@@ -484,8 +484,15 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 					fprintf(stderr, "<4>Shutdown ...\n");
 					// set a flag an shutdown in clean_exit() ???
 					// or will it call automaticly ???
-					// sync();
-					// reboot(LINUX_REBOOT_CMD_POWER_OFF);
+					sync();
+					reboot(LINUX_REBOOT_CMD_POWER_OFF);
+				}
+				else if ( ! strcasecmp("reboot", message->payload)) {
+					fprintf(stderr, "<4>Reboot ...\n");
+					// set a flag an shutdown in clean_exit() ???
+					// or will it call automaticly ???
+					sync();
+					reboot(LINUX_REBOOT_CMD_RESTART);
 				}
 			}
 		}
