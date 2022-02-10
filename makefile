@@ -35,12 +35,12 @@ clean:
 .PHONY: install
 install: 
 	@ echo "Daemon install  : $(BINDIR)$(NAME)"
-	@ install -D -m 755 $(DSTDIR)$(NAME) $(BINDIR)$(NAME)
+	@ install -pD -m 755 $(DSTDIR)$(NAME) $(BINDIR)$(NAME)
 	@ echo "Service install : $(SERVICEDIR)$(NAME).service"
-	@ install -D -m 644 $(SRCDIR)systemd.service $(SERVICEDIR)$(NAME).service
-	@ echo "Config install  : $(CFGDIR)$(NAME).conf"
-	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CFGDIR)$(NAME).conf
-	systemctl daemon-reload
+	@ install -pD -m 644 $(SRCDIR)systemd.service $(SERVICEDIR)$(NAME).service
+	@ echo "Config install  : $(CFGDIR)$(NAME).example.conf"
+	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CFGDIR)$(NAME).example.conf
+	@ systemctl daemon-reload
 	@ echo 
 	@ echo "Start the daemon : sudo systemctl start $(NAME)"
 	@ echo "Stop the daemon  : sudo systemctl stop $(NAME)"

@@ -24,6 +24,8 @@ const char *err_register_sigaction = "ERROR : Registering the signal handler fai
 const char *err_out_of_memory = "ERROR : Out of memory!\n";
 const char *status_off_string = "OFF";
 const char *status_on_string = "ON";
+const char *shutdown_poweroff = "--poweroff";
+const char *shutdown_reboot = "--reboot";
 
 /*******************************************/ /**
  * @brief Presets if options not found in config file

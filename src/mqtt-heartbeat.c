@@ -46,9 +46,8 @@
 //-----------------------------------------------
 typedef void (*sighandler_t)(int);
 char *config_file_name = NULL;
+const char *shutdown_cmd = NULL;
 bool pause_flag = false; 	/*!< set it TRUE the process go to paused, send SIGCONT to continue the process */
-bool reboot_flag = false;
-bool shutdown_flag = false;
 int keepalive = 30;
 char *mqtt_broker = NULL;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
@@ -101,24 +100,16 @@ void clean_exit()
 
 	fprintf(stderr, "<4>Cleanly teminated\n");
 
-	int return_value = 0;
-	if (reboot_flag)
+	if (shutdown_cmd)
 	{
+		char *command = malloc(128);
 		sync();
-		char shutdown_cmd[32] = "\n";
-		sprintf(shutdown_cmd, "shutdown --reboot %d", shutdown_delay);
-		return_value = system(shutdown_cmd);
-	}
-	else if (shutdown_flag)
-	{
-		sync();
-		char shutdown_cmd[32] = "\n";
-		sprintf(shutdown_cmd, "shutdown --poweroff %d", shutdown_delay);
-		return_value = system(shutdown_cmd);
-	}
-	if (return_value)
-	{
-		fprintf(stderr, "<3>System command faild!\n");
+		snprintf(command, 128, "shutdown %s %d", shutdown_cmd, shutdown_delay);
+		if ( system(command) )
+		{
+			fprintf(stderr, "<3>System command faild!\n");
+		}
+		free(command);
 	}
 
 	_exit(EXIT_SUCCESS);
@@ -521,27 +512,27 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 		// toggle, off, reboot
 		if ( ! (strcasecmp("cmnd", topic_part[0]))) {
 			if ( ! (strcasecmp("POWER1", topic_part[2]))) {
-				if ( ! strcasecmp("off", message->payload)) {
-					if (getuid() == 0)
+				if (getuid() == 0)
+				{
+					if ( ! strcasecmp("off", message->payload)) 
 					{
-						reboot_flag = true;
+						shutdown_cmd = shutdown_poweroff;
 						kill(0, SIGTERM);
 					}
-					else
+					else if ( ! strcasecmp("toggle", message->payload)) 
 					{
-						fprintf(stderr, "<4>Shutdown permission denied\n");
+						shutdown_cmd = shutdown_poweroff;
+						kill(0, SIGTERM);
+					}
+					else if ( ! strcasecmp("reboot", message->payload)) 
+					{
+						shutdown_cmd = shutdown_reboot;
+						kill(0, SIGTERM);
 					}
 				}
-				else if ( ! strcasecmp("reboot", message->payload)) {
-					if (getuid() == 0)
-					{
-						reboot_flag = true;
-						kill(0, SIGTERM);
-					}
-					else
-					{
-						fprintf(stderr, "<4>Reboot permission denied\n");
-					}
+				else
+				{
+					fprintf(stderr, "<4>Command permission denied\n");
 				}
 			}
 		}
@@ -775,7 +766,7 @@ int main(int argc, char *argv[])
 	// Main Loop
 	while (1)
 	{
-		if (reboot_flag || shutdown_flag)
+		if (shutdown_cmd)
 		{
 			continue;
 		}
