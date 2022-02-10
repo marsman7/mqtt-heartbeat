@@ -73,15 +73,13 @@ void clean_exit()
 		pub_parsed = parse_string(stat_pub_message, pub_parsed);
 		mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
 
-		fprintf(stderr, "wait");
-		int i = 200;
+		// Wait of empty send queue
+		int i = 100;
 		while (mosquitto_want_write(mosq) && (i > 0))
 		{
-			fprintf(stderr, ".");
-			usleep(100000);	// sleep 100ms
-			i--;
+				usleep(100000); // sleep 100ms
+				i--;
 		}
-		fprintf(stderr, "end\n");
 
 		// Terminate the conection to MQTT broker
 		mosquitto_destroy(mosq);
@@ -524,12 +522,10 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 		if ( ! (strcasecmp("cmnd", topic_part[0]))) {
 			if ( ! (strcasecmp("POWER1", topic_part[2]))) {
 				if ( ! strcasecmp("off", message->payload)) {
-					// fprintf(stderr, "<4>Shutdown ...\n");
-
 					if (getuid() == 0)
 					{
 						reboot_flag = true;
-						exit(EXIT_SUCCESS);
+						kill(0, SIGTERM);
 					}
 					else
 					{
@@ -537,12 +533,10 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 					}
 				}
 				else if ( ! strcasecmp("reboot", message->payload)) {
-					// fprintf(stderr, "<4>Reboot ...\n");
-
 					if (getuid() == 0)
 					{
 						reboot_flag = true;
-						exit(EXIT_SUCCESS);
+						kill(0, SIGTERM);
 					}
 					else
 					{
