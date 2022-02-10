@@ -73,13 +73,15 @@ void clean_exit()
 		pub_parsed = parse_string(stat_pub_message, pub_parsed);
 		mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
 
-		int i = 100;
+		fprintf(stderr, "wait");
+		int i = 200;
 		while (mosquitto_want_write(mosq) && (i > 0))
 		{
-			printf(".");
+			fprintf(stderr, ".");
 			usleep(100000);	// sleep 100ms
 			i--;
 		}
+		fprintf(stderr, "end\n");
 
 		// Terminate the conection to MQTT broker
 		mosquitto_destroy(mosq);
