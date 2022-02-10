@@ -30,6 +30,7 @@ const char *shutdown_reboot = "--reboot";
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
+int log_level = 6;  // Logging before read config use ever this level
 const char *preset_mqtt_broker = "localhost";
 int port = 1883;
 int qos = QOS_MOST_ONCE_DELIVERY;

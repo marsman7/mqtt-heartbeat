@@ -1,7 +1,8 @@
 ; systemd - units file
 ; Save this file in /etc/systemd/system or /lib/systemd/system
 [Unit]
-Description=MQTT Heartbeat 
+Description=MQTT Heartbeat
+BindsTo=systemd-networkd.service 
 
 [Service]
 Type=simple

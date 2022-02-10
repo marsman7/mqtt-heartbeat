@@ -10,26 +10,15 @@
 * ~~Doxygen unterstützen~~
 * SIGHUP - Config neu laden
 * Linux Man Pages
-* Log-level adjustable
+* ~~Log-level adjustable~~
 * Username and password for mqtt connection
 * Publish status / telemetry
-    - stat/# and tele/#
+    - ~~stat/# and tele/#~~
     - ~~On Status~~
-    - hostname
+    - ~~hostname~~
     - sysinfo() uptime : https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
     - CPU load : getloadavg()
     - RAM : status
     - HDD : status
-* Topic subscribe to shut down the machine
-    - https://man7.org/linux/man-pages/man2/reboot.2.html
-    - ```c
-      #include <unistd.h>  
-      #include <linux/reboot.h>
-      #include <sys/reboot.h>
-       
-      int main() {
-        sync();
-        reboot(LINUX_REBOOT_CMD_POWER_OFF);
-      }
-      ```
-* make install not overwrite the config file
+* ~~Topic subscribe to shut down the machine~~
+* ~~make install not overwrite the config file~~
