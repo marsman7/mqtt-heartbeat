@@ -2,7 +2,8 @@
 ; Save this file in /etc/systemd/system or /lib/systemd/system
 [Unit]
 Description=MQTT Heartbeat
-BindsTo=systemd-networkd.service 
+Wants=network-online.target
+After=network.target network-online.target
 
 [Service]
 Type=simple

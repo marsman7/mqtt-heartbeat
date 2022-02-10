@@ -8,7 +8,7 @@
 * ~~Unterstütung von makefile ("make" , "make install" , "make uninstell")~~
 * ~~Variables in Topic~~
 * ~~Doxygen unterstützen~~
-* SIGHUP - Config neu laden
+* ~~SIGHUP - Config neu laden~~
 * Linux Man Pages
 * ~~Log-level adjustable~~
 * Username and password for mqtt connection

@@ -23,7 +23,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/reboot.h>
-//#include <linux/reboot.h>
 #include <linux/limits.h>
 #include <errno.h>
 #include <syslog.h>
@@ -57,8 +56,57 @@ int status = STAT_ON;
 char *pub_parsed = NULL;
 
 //-----------------------------------------------
+void terminate_second_instance();
 char *parse_string(const char *, char *);
+int read_config();
+void init_mosquitto();
+void connect_broker();
+void on_connect_callback(struct mosquitto *, void *, int);
+void on_subscribe_callback(struct mosquitto *, void *, int, int, const int *);
+void on_message_callback(struct mosquitto *, void *, const struct mosquitto_message *);
+void on_publish_callback(struct mosquitto *, void *, int);
+void discard_free_config();
+void init_signal_handler();
+void signal_handler(int);
 
+/*******************************************/ /**
+ * @brief If this not the first instance, it is terminated
+ ***********************************************/
+void terminate_second_instance()
+{
+    int socket_fd = -1;
+    struct sockaddr_un un_sockaddr = {0};
+    size_t sockaddr_len;
+
+    if ((socket_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
+    {
+        LOG(3, "<%d>Could not create socket.\n");
+        _exit(EXIT_FAILURE);
+    }
+
+    un_sockaddr.sun_family = AF_UNIX;
+    strncpy(un_sockaddr.sun_path, lock_socket_name, sizeof(un_sockaddr.sun_path)-1);
+    // use the real sockaddr_length of socket name
+    sockaddr_len = sizeof(un_sockaddr.sun_family) + strlen(lock_socket_name) + 1;
+
+    if ( bind(socket_fd, (struct sockaddr *)&un_sockaddr, sockaddr_len) )
+    {
+        if (errno == EADDRINUSE) 
+		{
+			LOG(4, "<%d>An instance is already running, this will be terminated.\n");
+		} 
+		else 
+		{
+			char *errmsg = strerror( errno );
+			LOG(3, "<%d>Error on binding socket : %d; %s; %s\n", errno, errmsg, lock_socket_name);
+		}
+		close(socket_fd);
+        _exit(EXIT_FAILURE);
+    } else {
+        //LOG(6, "<%d>First instance\n");
+    }
+	close(socket_fd);
+}
 
 /*******************************************/ /**
  * @brief Terminate the process an clean the memory.
@@ -82,7 +130,8 @@ void clean_exit()
 				i--;
 		}
 
-		// Terminate the conection to MQTT broker
+		// Terminate the connection to MQTT broker
+		//mosquitto_disconnect(mosq);
 		mosquitto_destroy(mosq);
 		mosquitto_lib_cleanup();
 	}
@@ -91,14 +140,7 @@ void clean_exit()
 	unlink(lock_socket_name);
 
 	// Free allocated memory
-	free(stat_pub_topic);
-	free(tele_pub_topic);
-	free(pub_parsed);
-	free(sub_topic);
-	free(last_will_topic);
-	free(last_will_message);
-	free(pub_terminate_message);
-	free(mqtt_broker);
+	discard_free_config();
 
 	LOG(4, "<%d>Cleanly teminated\n");
 
@@ -115,87 +157,6 @@ void clean_exit()
 	}
 
 	_exit(EXIT_SUCCESS);
-}
-
-/*******************************************/ /**
- * @brief Processing of the received signals
- * 
- * void 
- *signal_handler(int sig)
- * 
- * @param iSignal : catched signal number
- ***********************************************/
-void signal_handler(int iSignal)
-{
-	// LOG(5, "<%d>signal : %s\n", strsignal(iSignal));
-
-	switch (iSignal)
-	{
-	case SIGTERM:
-		// triggert by systemctl stop process
-		LOG(5, "<%d>Terminate signal triggered\n");
-		exit(EXIT_SUCCESS);
-		break;
-	case SIGINT:
-		// triggert by pressing Ctrl-C in terminal
-		//fflush(stdin);
-		LOG(5, "<%d>Ctrl-C signal triggered\n");
-		exit(EXIT_SUCCESS);
-		break;
-	case SIGHUP:
-		// trigger defined in *.service file ExecReload=
-		LOG(5, "<%d>Hangup signal triggered\n");
-		break;
-	case SIGTSTP:
-		// triggert by pressing Ctrl-C in terminal
-		LOG(5, "<%d>Ctrl-Z signal triggered -> process pause\n");
-		pause_flag = true;
-		break;
-	case SIGCONT:
-		// trigger by run 'kill -SIGCONT <PID>'
-		LOG(5, "<%d>Continue paused process\n");
-		pause_flag = false;
-		break;
-	}
-}
-
-/*******************************************/ /**
- * @brief Initialize signals to be catched
- * 
- ***********************************************/
-void init_signal_handler()
-{
-	struct sigaction new_action;
-
-	new_action.sa_handler = signal_handler;
-	sigfillset(&new_action.sa_mask);
-	new_action.sa_flags = 0;
-
-	// Register signal handler
-	if (sigaction(SIGTERM, &new_action, NULL))
-	{
-		ERROR_EXIT(err_register_sigaction);
-	}
-
-	if (sigaction(SIGHUP, &new_action, NULL) != 0)
-	{
-		ERROR_EXIT(err_register_sigaction);
-	}
-
-	if (sigaction(SIGINT, &new_action, NULL) != 0)
-	{
-		ERROR_EXIT(err_register_sigaction);
-	}
-
-	if (sigaction(SIGTSTP, &new_action, NULL) != 0)
-	{
-		ERROR_EXIT(err_register_sigaction);
-	}
-
-	if (sigaction(SIGCONT, &new_action, NULL) != 0)
-	{
-		ERROR_EXIT(err_register_sigaction);
-	}
 }
 
 /*******************************************/ /**
@@ -420,13 +381,82 @@ int read_config()
 	}
 	strncpy(mqtt_broker, preset_mqtt_broker, strnlen(preset_mqtt_broker, 128-1)+1);
 
-
 	// mosquitto_pub_topic_check
 	// mosquitto_sub_topic_check
 
 	config_destroy(&cfg);
 
 	return EXIT_SUCCESS;
+}
+
+/*******************************************/ /**
+ * @brief Discard all settings and give free allocated memory
+ ***********************************************/
+void discard_free_config()
+{
+	free(stat_pub_topic); stat_pub_topic = NULL;
+	free(tele_pub_topic); tele_pub_topic = NULL;
+	free(pub_parsed); pub_parsed = NULL;
+	free(sub_topic); sub_topic = NULL;
+	free(last_will_topic); last_will_topic = NULL;
+	free(last_will_message); last_will_message = NULL;
+	free(pub_terminate_message); pub_terminate_message = NULL;
+	free(mqtt_broker); mqtt_broker = NULL;
+}
+
+/********************************************//**
+ * @brief Init the mosquitto libraryconnection to MQTT broker
+ ***********************************************/
+void init_mosquitto()
+{
+	int major, minor, revision;
+
+	// Print version of libmosquitto
+	mosquitto_lib_version(&major, &minor, &revision);
+	LOG(6, "<%d>Mosquitto Version : %d.%d.%d\n", major, minor, revision);
+
+	// Init Mosquitto Client, required for use libmosquitto
+	mosquitto_lib_init();
+
+	// Create a new client instance.
+	mosq = mosquitto_new(NULL, true, NULL);
+	if (!mosq)
+	{
+		LOG(3, "<%d>ERROR: Can't create mosquitto client!\n");
+		mosquitto_lib_cleanup();
+		exit(EXIT_FAILURE);
+	}
+
+	mosquitto_connect_callback_set(mosq, on_connect_callback);
+	mosquitto_message_callback_set(mosq, on_message_callback);
+	mosquitto_subscribe_callback_set(mosq, on_subscribe_callback);
+	mosquitto_publish_callback_set(mosq, on_publish_callback);
+
+	// mosquitto_disconnect_callback_set(mosq, void (*on_disconnect)(struct mosquitto *, void *, int));
+	// mosquitto_unsubscribe_callback_set(mosq, void (*on_unsubscribe)(struct mosquitto *, void *, int));
+}
+
+/********************************************//**
+ * @brief Connect the MQTT broker
+ ***********************************************/
+void connect_broker()
+{
+	// Set the last will must be called before calling mosquitto_connect.
+	mosquitto_will_set(mosq, last_will_topic, 
+			strlen(last_will_message), last_will_message, 
+			QOS_MOST_ONCE_DELIVERY, false);
+
+	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
+	{
+		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
+		exit(EXIT_FAILURE);
+	}
+
+	if (mosquitto_loop_start(mosq))
+	{
+		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
+		exit(EXIT_FAILURE);
+	}
 }
 
 /*******************************************/ /**
@@ -437,14 +467,12 @@ int read_config()
  *            an argument on any callbacks.
  * @param result - Connect return code, the values are defined by the MQTT protocol
  *            http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html#_Table_3.1_-
- * 
- * @todo #1
  ***********************************************/
 void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	if (!result)
 	{
-		LOG(5, "<%d>Connect to MQTT-broker success\n");
+		LOG(5, "<%d>Connection to MQTT-broker success : %s:%d\n", mqtt_broker, port);
 		if (strlen(sub_topic) > 0)
 		{
 			// Subscribe to broker information topics on successful connect.
@@ -494,16 +522,13 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 {
 	if (message->payloadlen)
 	{
-		LOG(6, "<%d>Message incomming : %s %s\n", message->topic, (char *)message->payload);
+		LOG(5, "<%d>Message incomming : %s %s\n", message->topic, (char *)message->payload);
 		
 		char **topic_part;
 		int topic_part_count;
+		
+		// Splitt topic substring array
 		mosquitto_sub_topic_tokenise(message->topic, &topic_part, &topic_part_count);
-		/*
-		for (int i=0; i<topic_part_count; i++) {
-			LOG(6, "<%d>Topic part %d : %s\n", i, topic_part[i]);
-		}
-		*/
 
 		// toggle, off, reboot
 		if ( ! (strcasecmp("cmnd", topic_part[0]))) {
@@ -537,7 +562,7 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 	}
 	else
 	{
-		LOG(6, "<%d>Message incomming : %s (null)\n", message->topic);
+		LOG(6, "<%d>Message incomming whithout payload : %s (null)\n", message->topic);
 	}
 	fflush(stdout);
 }
@@ -555,90 +580,101 @@ void on_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
 	LOG(6, "<%d>Successfully published : (mid: %d)\n", mid);
 }
 
-/********************************************//**
- * @brief Init the connection to MQTT broker
+/*******************************************/ /**
+ * @brief Processing of the received signals
+ * 
+ * void 
+ *signal_handler(int sig)
+ * 
+ * @param iSignal : catched signal number
  ***********************************************/
-void init_mosquitto_connection()
+void signal_handler(int iSignal)
 {
-	int major, minor, revision;
+	// LOG(5, "<%d>signal : %s\n", strsignal(iSignal));
 
-	// Print version of libmosquitto
-	mosquitto_lib_version(&major, &minor, &revision);
-	LOG(6, "<%d>Mosquitto Version : %d.%d.%d\n", major, minor, revision);
-
-	// Init Mosquitto Client, required for use libmosquitto
-	mosquitto_lib_init();
-
-	// Create a new client instance.
-	mosq = mosquitto_new(NULL, true, NULL);
-	if (!mosq)
+	switch (iSignal)
 	{
-		LOG(3, "<%d>ERROR: Can't create mosquitto client!\n");
-		mosquitto_lib_cleanup();
-		exit(EXIT_FAILURE);
-	}
+	case SIGTERM:
+		// triggert by systemctl stop process
+		LOG(5, "<%d>Terminate signal triggered\n");
+		exit(EXIT_SUCCESS);
+		break;
+	case SIGINT:
+		// triggert by pressing Ctrl-C in terminal
+		//fflush(stdin);
+		LOG(5, "<%d>Ctrl-C signal triggered\n");
+		exit(EXIT_SUCCESS);
+		break;
+	case SIGHUP:
+		// trigger defined in *.service file ExecReload=
+		LOG(5, "<%d>Reload config\n");
 
-	mosquitto_connect_callback_set(mosq, on_connect_callback);
-	mosquitto_message_callback_set(mosq, on_message_callback);
-	mosquitto_subscribe_callback_set(mosq, on_subscribe_callback);
-	mosquitto_publish_callback_set(mosq, on_publish_callback);
+		int err = 0;
+		err |= mosquitto_will_clear(mosq);
+		err |= mosquitto_unsubscribe(mosq,	NULL, sub_topic);
+		err |= mosquitto_disconnect(mosq);
+		err |= mosquitto_loop_stop(mosq, false);
+		if ( err )
+		{
+			LOG(4, "<%d>Error on discard broker connection\n");
+		}
 
-	// Set the last will must be called before calling mosquitto_connect.
-	// int mosquitto_will_set(mosq, topic, payloadlen, payload, qos, retain);
-	mosquitto_will_set(mosq, last_will_topic, 
-			strlen(last_will_message), last_will_message, 
-			QOS_MOST_ONCE_DELIVERY, false);
+		// Free allocated memory
+		discard_free_config();
 
-	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
-	{
-		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
-		exit(EXIT_FAILURE);
-	}
-
-	if (mosquitto_loop_start(mosq))
-	{
-		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
-		exit(EXIT_FAILURE);
+		read_config();
+		connect_broker();
+		break;
+	case SIGTSTP:
+		// triggert by pressing Ctrl-C in terminal
+		LOG(5, "<%d>Ctrl-Z signal triggered -> process pause\n");
+		pause_flag = true;
+		break;
+	case SIGCONT:
+		// trigger by run 'kill -SIGCONT <PID>'
+		LOG(5, "<%d>Continue paused process\n");
+		pause_flag = false;
+		break;
 	}
 }
 
 /*******************************************/ /**
- * @brief If this not the first instance, it is terminated
+ * @brief Initialize signals to be catched
+ * 
  ***********************************************/
-void terminate_second_instance()
+void init_signal_handler()
 {
-    int socket_fd = -1;
-    struct sockaddr_un un_sockaddr = {0};
-    size_t sockaddr_len;
+	struct sigaction new_action;
 
-    if ((socket_fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
-    {
-        LOG(3, "<%d>Could not create socket.\n");
-        _exit(EXIT_FAILURE);
-    }
+	new_action.sa_handler = signal_handler;
+	sigfillset(&new_action.sa_mask);
+	new_action.sa_flags = 0;
 
-    un_sockaddr.sun_family = AF_UNIX;
-    strncpy(un_sockaddr.sun_path, lock_socket_name, sizeof(un_sockaddr.sun_path)-1);
-    // use the real sockaddr_length of socket name
-    sockaddr_len = sizeof(un_sockaddr.sun_family) + strlen(lock_socket_name) + 1;
+	// Register signal handler
+	if (sigaction(SIGTERM, &new_action, NULL))
+	{
+		ERROR_EXIT(err_register_sigaction);
+	}
 
-    if ( bind(socket_fd, (struct sockaddr *)&un_sockaddr, sockaddr_len) )
-    {
-        if (errno == EADDRINUSE) 
-		{
-			LOG(4, "<%d>An instance is already running, this will be terminated.\n");
-		} 
-		else 
-		{
-			char *errmsg = strerror( errno );
-			LOG(3, "<%d>Error on binding socket : %d; %s; %s\n", errno, errmsg, lock_socket_name);
-		}
-		close(socket_fd);
-        _exit(EXIT_FAILURE);
-    } else {
-        //LOG(6, "<%d>First instance\n");
-    }
-	close(socket_fd);
+	if (sigaction(SIGHUP, &new_action, NULL) != 0)
+	{
+		ERROR_EXIT(err_register_sigaction);
+	}
+
+	if (sigaction(SIGINT, &new_action, NULL) != 0)
+	{
+		ERROR_EXIT(err_register_sigaction);
+	}
+
+	if (sigaction(SIGTSTP, &new_action, NULL) != 0)
+	{
+		ERROR_EXIT(err_register_sigaction);
+	}
+
+	if (sigaction(SIGCONT, &new_action, NULL) != 0)
+	{
+		ERROR_EXIT(err_register_sigaction);
+	}
 }
 
 /*******************************************/ /**
@@ -647,8 +683,6 @@ void terminate_second_instance()
  * @param argc - Count of command line parameter
  * @param argv - An Array of commend line parameter
  * @return int - Exit Code, Zero at success otherwise -1
- * 
- * @todo #2 make QOS on publish editable
  ***********************************************/
 int main(int argc, char *argv[])
 {
@@ -750,8 +784,8 @@ int main(int argc, char *argv[])
 	LOG(6, "<%d>Config file processed ...\n");
 
 	// Initialize connetction to MQTT broker
-	init_mosquitto_connection();
-	LOG(5, "<%d>MQTT-broker connected : %s:%d\n", mqtt_broker, port);
+	init_mosquitto();
+	connect_broker();
 
 	// Initialize signals to be catched
 	init_signal_handler();
