@@ -99,18 +99,22 @@ void clean_exit()
 	free(pub_terminate_message);
 	free(mqtt_broker);
 
-	fprintf(stderr, "<4>cleanly teminated ...\n");
+	fprintf(stderr, "<4>Cleanly teminated\n");
 
 	int return_value = 0;
 	if (reboot_flag)
 	{
 		sync();
-		return_value = system("shutdown --reboot now 'Reboot per MQTT message'");
+		char shutdown_cmd[32] = "\n";
+		sprintf(shutdown_cmd, "shutdown --reboot %d", shutdown_delay);
+		return_value = system(shutdown_cmd);
 	}
 	else if (shutdown_flag)
 	{
 		sync();
-		return_value = system("shutdown --poweroff now 'Shutdown per MQTT message'");
+		char shutdown_cmd[32] = "\n";
+		sprintf(shutdown_cmd, "shutdown --poweroff %d", shutdown_delay);
+		return_value = system(shutdown_cmd);
 	}
 	if (return_value)
 	{
@@ -136,27 +140,27 @@ void signal_handler(int iSignal)
 	{
 	case SIGTERM:
 		// triggert by systemctl stop process
-		fprintf(stderr, "<5>Terminate signal triggered ...\n");
+		fprintf(stderr, "<5>Terminate signal triggered\n");
 		exit(EXIT_SUCCESS);
 		break;
 	case SIGINT:
 		// triggert by pressing Ctrl-C in terminal
 		//fflush(stdin);
-		fprintf(stderr, "<5>Ctrl-C signal triggered ...\n");
+		fprintf(stderr, "<5>Ctrl-C signal triggered\n");
 		exit(EXIT_SUCCESS);
 		break;
 	case SIGHUP:
 		// trigger defined in *.service file ExecReload=
-		fprintf(stderr, "<5>Hangup signal triggered ...\n");
+		fprintf(stderr, "<5>Hangup signal triggered\n");
 		break;
 	case SIGTSTP:
 		// triggert by pressing Ctrl-C in terminal
-		fprintf(stderr, "<5>Ctrl-Z signal triggered -> process pause ...\n");
+		fprintf(stderr, "<5>Ctrl-Z signal triggered -> process pause\n");
 		pause_flag = true;
 		break;
 	case SIGCONT:
 		// trigger by run 'kill -SIGCONT <PID>'
-		fprintf(stderr, "<5>Continue paused process ...\n");
+		fprintf(stderr, "<5>Continue paused process\n");
 		pause_flag = false;
 		break;
 	}
@@ -384,6 +388,7 @@ int read_config()
 	// Get stored settings.
 	config_lookup_string(&cfg, "broker", &preset_mqtt_broker);
 	config_lookup_int(&cfg, "port", &port);
+	config_lookup_int(&cfg, "shutdown_delay", &shutdown_delay);
 	config_lookup_int(&cfg, "stat_interval", &stat_interval);
 	config_lookup_string(&cfg, "stat_pub_topic", &preset_stat_pub_topic);
 	config_lookup_string(&cfg, "stat_pub_message", &preset_stat_pub_message);
@@ -774,6 +779,11 @@ int main(int argc, char *argv[])
 	// Main Loop
 	while (1)
 	{
+		if (reboot_flag || shutdown_flag)
+		{
+			continue;
+		}
+		
 		if (pause_flag)
 			pause();
 

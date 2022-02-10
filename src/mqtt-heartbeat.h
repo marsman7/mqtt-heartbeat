@@ -31,6 +31,7 @@ const char *status_on_string = "ON";
 const char *preset_mqtt_broker = "localhost";
 int port = 1883;
 int qos = QOS_MOST_ONCE_DELIVERY;
+int shutdown_delay = 0;
 
 int stat_interval = 5;
 char *stat_pub_topic = NULL;
