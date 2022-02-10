@@ -70,9 +70,16 @@ void clean_exit()
 	status = STAT_OFF;
 	if (mosq)
 	{
-		pub_parsed = parse_string(tele_pub_message, pub_parsed);
-		mosquitto_publish(mosq, NULL, tele_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
-		usleep(100000);	// sleep 100ms
+		pub_parsed = parse_string(stat_pub_message, pub_parsed);
+		mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
+
+		int i = 100;
+		while (mosquitto_want_write(mosq) && (i > 0))
+		{
+			printf(".");
+			usleep(100000);	// sleep 100ms
+			i--;
+		}
 
 		// Terminate the conection to MQTT broker
 		mosquitto_destroy(mosq);
