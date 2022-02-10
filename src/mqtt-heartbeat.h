@@ -16,6 +16,11 @@ enum stat_t
     STAT_ON = 1
 };
 
+#define MAJOR       1
+#define MINOR       0
+#define REVISION    0
+#define COMPILATION 0
+
 const char *lock_socket_name = "/tmp/mqtt-heartbeat";
 
 const char *system_config_dir = "/etc/";

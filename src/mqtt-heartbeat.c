@@ -472,7 +472,7 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	if (!result)
 	{
-		LOG(5, "<%d>Connection to MQTT-broker success : %s:%d\n", mqtt_broker, port);
+		LOG(5, "<%d>Connecting to MQTT-broker '%s:%d' success\n", mqtt_broker, port);
 		if (strlen(sub_topic) > 0)
 		{
 			// Subscribe to broker information topics on successful connect.
@@ -686,7 +686,8 @@ void init_signal_handler()
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	LOG(6, "<%d>Process started [PID - %d] [PPID - %d] ...\n", getpid(), getppid());
+	LOG(6, "<%d>MQTT-Heartbeat %d.%d.%d.%d started  [PID - %d] [PPID - %d]\n", 
+				MAJOR, MINOR, REVISION, COMPILATION, getpid(), getppid());
 	if (getppid() == 1)
 	{
 		// run as daemon
@@ -781,7 +782,7 @@ int main(int argc, char *argv[])
 	{
 		LOG(4, "<%d>WARNING: Config file I/O error, use default settings!\n");
 	}
-	LOG(6, "<%d>Config file processed ...\n");
+	LOG(6, "<%d>Config file processed\n");
 
 	// Initialize connetction to MQTT broker
 	init_mosquitto();
