@@ -23,7 +23,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/reboot.h>
-#include <linux/reboot.h>
+//#include <linux/reboot.h>
 #include <linux/limits.h>
 #include <errno.h>
 #include <syslog.h>
@@ -46,7 +46,9 @@
 //-----------------------------------------------
 typedef void (*sighandler_t)(int);
 char *config_file_name = NULL;
-bool pause_flag = false; 	/*!< if it set to TRUE the process go to paused, send SIGCONT to continue the process */
+bool pause_flag = false; 	/*!< set it TRUE the process go to paused, send SIGCONT to continue the process */
+bool reboot_flag = false;
+bool shutdown_flag = false;
 int keepalive = 30;
 char *mqtt_broker = NULL;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
@@ -91,7 +93,24 @@ void clean_exit()
 	free(mqtt_broker);
 
 	fprintf(stderr, "<4>cleanly teminated ...\n");
-	exit(EXIT_SUCCESS);
+
+	int return_value = 0;
+	if (reboot_flag)
+	{
+		sync();
+		return_value = system("shutdown --reboot now 'Reboot per MQTT message'");
+	}
+	else if (shutdown_flag)
+	{
+		sync();
+		return_value = system("shutdown --poweroff now 'Shutdown per MQTT message'");
+	}
+	if (return_value)
+	{
+		fprintf(stderr, "<3>System command faild!\n");
+	}
+
+	_exit(EXIT_SUCCESS);
 }
 
 /*******************************************/ /**
@@ -491,18 +510,30 @@ void on_message_callback(struct mosquitto *mosq, void *userdata, const struct mo
 		if ( ! (strcasecmp("cmnd", topic_part[0]))) {
 			if ( ! (strcasecmp("POWER1", topic_part[2]))) {
 				if ( ! strcasecmp("off", message->payload)) {
-					fprintf(stderr, "<4>Shutdown ...\n");
-					// set a flag an shutdown in clean_exit() ???
-					// or will it call automaticly ???
-					sync();
-					reboot(LINUX_REBOOT_CMD_POWER_OFF);
+					// fprintf(stderr, "<4>Shutdown ...\n");
+
+					if (getuid() == 0)
+					{
+						reboot_flag = true;
+						exit(EXIT_SUCCESS);
+					}
+					else
+					{
+						fprintf(stderr, "<4>Shutdown permission denied\n");
+					}
 				}
 				else if ( ! strcasecmp("reboot", message->payload)) {
-					fprintf(stderr, "<4>Reboot ...\n");
-					// set a flag an shutdown in clean_exit() ???
-					// or will it call automaticly ???
-					sync();
-					reboot(LINUX_REBOOT_CMD_RESTART);
+					// fprintf(stderr, "<4>Reboot ...\n");
+
+					if (getuid() == 0)
+					{
+						reboot_flag = true;
+						exit(EXIT_SUCCESS);
+					}
+					else
+					{
+						fprintf(stderr, "<4>Reboot permission denied\n");
+					}
 				}
 			}
 		}
@@ -675,9 +706,9 @@ int main(int argc, char *argv[])
 
 	// if not config file set by commandline, get directory and config file name 
 	if ( ! config_file_name) {
-		fprintf(stderr, "<6>  CWD   : %s\n", getcwd(NULL, 0));
-		fprintf(stderr, "<6>  Arg 0 : %s\n", argv[0]);
-		fprintf(stderr, "<6>  Base  : %s\n", basename(argv[0]));
+		// fprintf(stderr, "<6>  CWD   : %s\n", getcwd(NULL, 0));
+		// fprintf(stderr, "<6>  Arg 0 : %s\n", argv[0]);
+		// fprintf(stderr, "<6>  Base  : %s\n", basename(argv[0]));
 
 		if (getppid() == 1) 
 		{

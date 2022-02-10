@@ -2,7 +2,6 @@
 ; Save this file in /etc/systemd/system or /lib/systemd/system
 [Unit]
 Description=MQTT Heartbeat 
-BindsTo=mosquitto.service
 
 [Service]
 Type=simple

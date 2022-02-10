@@ -32,4 +32,4 @@
         reboot(LINUX_REBOOT_CMD_POWER_OFF);
       }
       ```
-    -
+* make install not overwrite the config file

@@ -40,6 +40,7 @@ install:
 	@ install -D -m 644 $(SRCDIR)systemd.service $(SERVICEDIR)$(NAME).service
 	@ echo "Config install  : $(CFGDIR)$(NAME).conf"
 	@ install -D -m 644 $(SRCDIR)$(NAME).example.conf $(CFGDIR)$(NAME).conf
+	systemctl daemon-reload
 	@ echo 
 	@ echo "Start the daemon : sudo systemctl start $(NAME)"
 	@ echo "Stop the daemon  : sudo systemctl stop $(NAME)"
