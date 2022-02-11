@@ -686,7 +686,7 @@ void init_signal_handler()
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	LOG(6, "<%d>MQTT-Heartbeat %d.%d.%d.%d started  [PID - %d] [PPID - %d]\n", 
+	LOG(4, "<%d>MQTT-Heartbeat %d.%d.%d.%d started  [PID - %d] [PPID - %d]\n", 
 				MAJOR, MINOR, REVISION, COMPILATION, getpid(), getppid());
 	if (getppid() == 1)
 	{
