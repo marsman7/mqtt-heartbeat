@@ -19,7 +19,7 @@ enum stat_t
 #define MAJOR       1
 #define MINOR       0
 #define REVISION    0
-#define COMPILATION 0
+#define COMPILATION 1
 
 const char *lock_socket_name = "/tmp/mqtt-heartbeat";
 
@@ -35,11 +35,22 @@ const char *shutdown_reboot = "--reboot";
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
-int log_level = 6;  // Logging before read config use ever this level
-const char *preset_mqtt_broker = "localhost";
-int port = 1883;
-int qos = QOS_MOST_ONCE_DELIVERY;
+int log_level = 0;
+int preset_log_level = 6;  // Logging before read config use ever this level
+int port = 0;
+int preset_port = 1883;
+int qos = 0;
+int preset_qos = QOS_MOST_ONCE_DELIVERY;
 int shutdown_delay = 0;
+int preset_shutdown_delay = 0;
+
+char *mqtt_broker = NULL;
+const char *preset_mqtt_broker = "localhost";
+char *broker_user = NULL;
+const char *preset_broker_user = "\0";
+char *broker_password = NULL;
+const char *preset_broker_password = "\0";
+
 
 int stat_interval = 5;
 char *stat_pub_topic = NULL;
