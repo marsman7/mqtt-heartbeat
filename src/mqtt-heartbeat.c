@@ -50,14 +50,16 @@ char *config_file_name = NULL;
 const char *shutdown_cmd = NULL;
 bool pause_flag = false; 	/*!< set it TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
-char *mqtt_broker = NULL;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
 int status = STAT_ON;
 char *pub_parsed = NULL;
 
 //-----------------------------------------------
 void terminate_second_instance();
-char *parse_string(const char *, char *);
+char *parse_string(char *, const char *);
+char *alloc_string(char *, const char *);
+int get_config_int(const config_t *, const char *, int *, int );
+int get_config_string(const config_t *, const char *, char **, const char *, bool);
 int read_config();
 void init_mosquitto();
 void connect_broker();
@@ -119,7 +121,7 @@ void clean_exit()
 	status = STAT_OFF;
 	if (mosq)
 	{
-		pub_parsed = parse_string(stat_pub_message, pub_parsed);
+		pub_parsed = parse_string(pub_parsed, stat_pub_message);
 		mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
 
 		// Wait of empty send queue
@@ -164,10 +166,12 @@ void clean_exit()
  * A Tag must be surrounded with %. For example foo/%bar%/for/%every%
  * The returnet pointer must be freeing ( free(char*) ).
  * 
- * @param src_string - Given incoming string
+ * @param dst_string - Pointer to destination string to reuse the memory 
+ *                     or NULL to use new allocated memory.
+ * @param src_string - Pointer to given incoming string
  * @return char* - Pointer to parsed string
  ***********************************************/
-char *parse_string(const char *src_string, char *dst_string)
+char *parse_string(char *dst_string, const char *src_string)
 {
 	if (! src_string)
 	{
@@ -299,9 +303,53 @@ char *parse_string(const char *src_string, char *dst_string)
 }
 
 /*******************************************/ /**
+ * @brief Allocate or reallocate memory to store a string. The 
+ * returnet pointer must be freeing ( free(char*) ).
+ * 
+ * @param dst_string - Pointer to destination string to reuse the memory 
+ *                     or NULL to use new allocated memory.
+ * @param src_string - Pointer to given incoming string
+ * @return char* - Pointer to destination string
+ ***********************************************/
+char *alloc_string(char *dst_string, const char *src_string)
+{
+	dst_string = realloc(dst_string, strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+	*dst_string = '\0';
+	strncpy(dst_string, src_string, strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+
+	return dst_string;
+}
+
+int get_config_int(const config_t *config, const char *name, int *dst_int, int default_int)
+{
+	*dst_int = default_int;
+	return config_lookup_int(config, name, dst_int);
+}
+
+int get_config_string(const config_t *config, const char *name, char **dst_string, const char *src_string, bool to_pars)
+{
+	int result = config_lookup_string(config, name, &src_string);
+
+	if (to_pars)
+	{
+		*dst_string = parse_string(*dst_string, src_string);
+		return result;
+	}
+
+	// if found the option "name" in config use it otherwise use the given string
+	*dst_string = realloc(*dst_string, strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+	**dst_string = '\0';
+	strncpy(*dst_string, src_string, strnlen(src_string, MQTT_MAX_MESSAGE_LENGTH-1)+1);
+
+	return result;
+}
+
+/*******************************************/ /**
  * @brief Reads the configuration file or creates it if it is not available
  * 
  * @return int - Result, ZERO at successfully, otherwise -1
+ * 
+ * @todo #3 on reload gets a memory error if option is not defined in config file
  ***********************************************/
 int read_config()
 {
@@ -340,46 +388,25 @@ int read_config()
 	}
 
 	// Get stored settings.
-	config_lookup_int(&cfg, "log_level", &log_level);
-	config_lookup_string(&cfg, "broker", &preset_mqtt_broker);
-	config_lookup_int(&cfg, "port", &port);
-	config_lookup_int(&cfg, "shutdown_delay", &shutdown_delay);
-	config_lookup_int(&cfg, "stat_interval", &stat_interval);
-	config_lookup_string(&cfg, "stat_pub_topic", &preset_stat_pub_topic);
-	config_lookup_string(&cfg, "stat_pub_message", &preset_stat_pub_message);
-	config_lookup_int(&cfg, "tele_interval", &tele_interval);
-	config_lookup_string(&cfg, "tele_pub_topic", &preset_tele_pub_topic);
-	config_lookup_string(&cfg, "tele_pub_message", &preset_tele_pub_message);
-	config_lookup_string(&cfg, "sub_topic", &preset_sub_topic);
-	config_lookup_int(&cfg, "QoS", &qos);
+	get_config_int(&cfg, "log_level", &log_level, preset_log_level);
+	get_config_string(&cfg, "broker", &mqtt_broker, preset_mqtt_broker, false);
+	get_config_int(&cfg, "port", &port, preset_port);
+	get_config_string(&cfg, "broker_user", &broker_user, preset_broker_user, false);
+	get_config_string(&cfg, "broker_password", &broker_password, preset_broker_password, false);
+	get_config_int(&cfg, "shutdown_delay", &shutdown_delay, preset_shutdown_delay);
+	get_config_int(&cfg, "stat_interval", &stat_interval, preset_stat_interval);
+	get_config_string(&cfg, "stat_pub_topic", &stat_pub_topic, preset_stat_pub_topic, true);
+	get_config_string(&cfg, "stat_pub_message", &stat_pub_message, preset_stat_pub_message, false);
+	get_config_int(&cfg, "tele_interval", &tele_interval, preset_tele_interval);
+	get_config_string(&cfg, "tele_pub_topic", &tele_pub_topic, preset_tele_pub_topic, true);
+	get_config_string(&cfg, "tele_pub_message", &tele_pub_message, preset_tele_pub_message, false);
 
-	stat_pub_topic = parse_string(preset_stat_pub_topic, NULL);
-	tele_pub_topic = parse_string(preset_tele_pub_topic, NULL);
-	sub_topic = parse_string(preset_sub_topic, NULL);
-	last_will_topic = parse_string(preset_last_will_topic, NULL);
-	last_will_message = parse_string(preset_last_will_message, NULL);
-	pub_terminate_message = parse_string(preset_pub_terminate_message, NULL);
+	get_config_string(&cfg, "pub_terminate_message", &pub_terminate_message, preset_pub_terminate_message, true);
+	get_config_string(&cfg, "last_will_topic", &last_will_topic, preset_last_will_topic, true);
+	get_config_string(&cfg, "last_will_message", &last_will_message, preset_last_will_message, false);
 
-	if ( ! stat_pub_message )
-	{
-		stat_pub_message = realloc(stat_pub_message, strnlen(preset_stat_pub_message, MQTT_MAX_MESSAGE_LENGTH));
-		*stat_pub_message = '\0';
-	}
-	strncpy(stat_pub_message, preset_stat_pub_message, strnlen(preset_stat_pub_message, MQTT_MAX_MESSAGE_LENGTH-1)+1);
-
-	if ( ! tele_pub_message )
-	{
-		tele_pub_message = realloc(tele_pub_message, strnlen(preset_tele_pub_message, MQTT_MAX_MESSAGE_LENGTH));
-		*tele_pub_message = '\0';
-	}
-	strncpy(tele_pub_message, preset_tele_pub_message, strnlen(preset_tele_pub_message, MQTT_MAX_MESSAGE_LENGTH-1)+1);
-
-	if ( ! mqtt_broker )
-	{
-		mqtt_broker = realloc(mqtt_broker, strnlen(preset_mqtt_broker, 128));
-		*mqtt_broker = '\0';
-	}
-	strncpy(mqtt_broker, preset_mqtt_broker, strnlen(preset_mqtt_broker, 128-1)+1);
+	get_config_string(&cfg, "sub_topic", &sub_topic, preset_sub_topic, true);
+	get_config_int(&cfg, "QoS", &qos, preset_qos);
 
 	// mosquitto_pub_topic_check
 	// mosquitto_sub_topic_check
@@ -445,6 +472,8 @@ void connect_broker()
 	mosquitto_will_set(mosq, last_will_topic, 
 			strlen(last_will_message), last_will_message, 
 			QOS_MOST_ONCE_DELIVERY, false);
+
+	// mosquitto_username_pw_set(mosq, broker_user, preset_broker_password);
 
 	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
 	{
@@ -806,7 +835,7 @@ int main(int argc, char *argv[])
 			pause();
 
 		if ( (! stat_couter--) && (stat_interval > 0)) {
-			pub_parsed = parse_string(stat_pub_message, pub_parsed);
+			pub_parsed = parse_string(pub_parsed, stat_pub_message);
 			LOG(6, "<%d>Sending status ... \n");
 			//LOG(6, "<%d>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
 			mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
@@ -814,7 +843,7 @@ int main(int argc, char *argv[])
 		}
 
 		if ( (! tele_couter--) && (tele_interval > 0)) {
-			pub_parsed = parse_string(tele_pub_message, pub_parsed);
+			pub_parsed = parse_string(pub_parsed, tele_pub_message);
 			LOG(6, "<%d>Sending telemetry ... \n");
 			//LOG(6, "<%d>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
 			mosquitto_publish(mosq, NULL, tele_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);

@@ -19,7 +19,7 @@ enum stat_t
 #define MAJOR       1
 #define MINOR       0
 #define REVISION    0
-#define COMPILATION 0
+#define COMPILATION 1
 
 const char *lock_socket_name = "/tmp/mqtt-heartbeat";
 
@@ -35,29 +35,42 @@ const char *shutdown_reboot = "--reboot";
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
-int log_level = 6;  // Logging before read config use ever this level
-const char *preset_mqtt_broker = "localhost";
-int port = 1883;
-int qos = QOS_MOST_ONCE_DELIVERY;
+int log_level = 6;
+int preset_log_level = 6;  // Logging before read config use ever this level
+int port = 0;
+int preset_port = 1883;
+int qos = 0;
+int preset_qos = QOS_MOST_ONCE_DELIVERY;
 int shutdown_delay = 0;
+int preset_shutdown_delay = 0;
 
-int stat_interval = 5;
+char *mqtt_broker = NULL;
+const char *preset_mqtt_broker = "localhost";
+char *broker_user = NULL;
+const char *preset_broker_user = "\0";
+char *broker_password = NULL;
+const char *preset_broker_password = "\0";
+
+
+int stat_interval = 0;
+int preset_stat_interval = 5;
 char *stat_pub_topic = NULL;
 const char *preset_stat_pub_topic = "stat/\%hostname\%/POWER1";
 char *stat_pub_message = NULL;
 const char *preset_stat_pub_message = "\%status\%";
 
-int tele_interval = 60;
+char *pub_terminate_message = NULL;
+const char *preset_pub_terminate_message ="\%status\%";
+
+int tele_interval = 0;
+int preset_tele_interval = 60;
 char *tele_pub_topic = NULL;
 const char *preset_tele_pub_topic = "tele/\%hostname\%/STATE";
 char *tele_pub_message = NULL;
-const char *preset_tele_pub_message = "{\"POWER\":\"ON\"}";
-
-char *pub_terminate_message = NULL;
-const char *preset_pub_terminate_message = "{\"POWER\":\"OFF\"}";
+const char *preset_tele_pub_message = "{\"POWER1\":\"\%status\%\"}";
 
 char *sub_topic = NULL;
-const char *preset_sub_topic = "\0";    // "cmnd/\%hostname\%/POWER";
+const char *preset_sub_topic = "\0";    // "cmnd/\%hostname\%/POWER1";
 
 char *last_will_topic = NULL;
 const char *preset_last_will_topic = "tele/\%hostname\%/LWT";
