@@ -1,6 +1,12 @@
 # MQTT-Heartbeat
 
-MQTT-Heartbeat is a Linux service that periodically sends a status message via MQTT. 
+[Deutsche Version dieses Dokuments](README_DE.md)
+
+**@todo #4 must be revised**
+
+
+MQTT-Heartbeat is a Linux daemon that periodically sends status 
+and telemetry messages via MQTT. 
 
 ## Dependencys
 
@@ -19,7 +25,7 @@ The following Librarys must be installed for development:
 
 >`make`
 
->`make install`
+>`sudo make install`
 
 ## Run as a normal process in a terminal
 
