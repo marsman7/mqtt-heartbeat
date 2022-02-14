@@ -450,8 +450,6 @@ int get_config_string(const config_t *config, const char *name, char **dst_strin
  * @brief Reads the configuration file or creates it if it is not available
  * 
  * @return int - Result, ZERO at successfully, otherwise -1
- * 
- * @todo #3 on reload gets a memory error if option is not defined in config file
  ***********************************************/
 int read_config()
 {
