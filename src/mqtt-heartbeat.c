@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/statvfs.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/reboot.h>
@@ -260,27 +261,82 @@ char *parse_string(char *dst_string, const char *src_string)
 		}
 		else if (strncasecmp("loadavg_1", src_string, sub_string_length) == 0)
 		{
-			double loadavgs[3];
-			getloadavg(loadavgs, 3);
-			sprintf(tag_value, "%.0f", loadavgs[0]*1000);		
+			//double loadavgs[3];
+			//getloadavg(loadavgs, 3);
+			//sprintf(tag_value, "%.0f", loadavgs[0]*1000);		
+			struct sysinfo info;
+			sysinfo(&info);
+			sprintf(tag_value, "%lu", info.loads[0]);		
 			sub_string_length = strnlen(tag_value, sizeof(tag_value));
 			ptag_value = tag_value;
 			var_found = true;
 		}
 		else if (strncasecmp("uptime", src_string, sub_string_length) == 0)
 		{
-			struct sysinfo *info;
-			sysinfo(info);
-			sprintf(tag_value, "%ld", info->uptime);		
+			struct sysinfo info;
+			sysinfo(&info);
+			sprintf(tag_value, "%ld", info.uptime);		
 			sub_string_length = strnlen(tag_value, sizeof(tag_value));
 			ptag_value = tag_value;
 			var_found = true;
 		}
-		else if (strncasecmp("freeram", src_string, sub_string_length) == 0)
+		else if (strncasecmp("ramfree", src_string, sub_string_length) == 0)
 		{
-			struct sysinfo *info;
-			sysinfo(info);
-			sprintf(tag_value, "%ld", info->freeram);		
+			// free RAM in percent
+			struct sysinfo info;
+			sysinfo(&info);
+			sprintf(tag_value, "%ld", info.freeram * 100 / info.totalram);		
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
+			var_found = true;
+		}
+		else if (strncasecmp("diskfree_mb", src_string, sub_string_length) == 0)
+		{
+			struct statvfs fsinfo;
+
+  			if ( ! statvfs("/", &fsinfo) )
+			{
+				sprintf(tag_value, "%ld", (fsinfo.f_bsize * fsinfo.f_bfree) >> 20);
+			}
+			else
+			{
+				LOG(3, "<%d>Error : Get file system info!\n");
+				sprintf(tag_value, "0");
+			}
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
+			var_found = true;
+		}
+		else if (strncasecmp(service_prefix, src_string, strlen(service_prefix)) == 0)
+		{
+			const char *ptemp = src_string + strlen(service_prefix);
+			int service_name_len = sub_string_length - strlen(service_prefix);
+			if ( (! strlen(ptemp)) && service_name_len )
+			{
+				sprintf(tag_value, "0");
+			}
+			else
+			{
+				char system_cmd[128] = "systemctl is-active ";
+				strncat(system_cmd, ptemp, service_name_len);
+				//LOG(6, "<%d>%s\n", system_cmd);
+
+				// Will write the output from system command in the pipe
+				FILE *system_command_pipe;
+				system_command_pipe = popen(system_cmd, "r");
+				if ( ! fgets(tag_value, sizeof(tag_value), system_command_pipe) )
+				{
+					LOG(6, "<%d>Error : On read from pipe!\n");
+					tag_value[0] = '\0';
+				}
+				else
+				{
+					char *ptemp = strpbrk(tag_value, "\n\r");
+					// Cut the line break on the end of the string
+					*ptemp = '\0';
+				}
+				pclose(system_command_pipe);
+			}
 			sub_string_length = strnlen(tag_value, sizeof(tag_value));
 			ptag_value = tag_value;
 			var_found = true;

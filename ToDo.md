@@ -9,17 +9,17 @@
 * ~~Variables in Topic~~
 * ~~Doxygen unterstützen~~
 * ~~SIGHUP - Config neu laden~~
-* Linux Man Pages
 * ~~Log-level adjustable~~
 * ~~Username and password for mqtt connection~~
-* Publish status / telemetry
+* Publish
     - ~~stat/# and tele/#~~
     - ~~On Status~~
     - ~~hostname~~
-    - sysinfo() uptime : https://stackoverflow.com/questions/1540627/what-api-do-i-call-to-get-the-system-uptime
+    - ~~Uptime~~
     - ~~CPU load~~
-    - RAM : status
-    - HDD : status
-    - status of a service : `system("systemctl is-active <service>")`
+    - ~~RAM : free~~
+    - ~~Disk : free~~
+    - ~~status of a service~~
 * ~~Topic subscribe to shut down the machine~~
 * ~~make install not overwrite the config file~~
+* Linux Man Pages
