@@ -3,8 +3,10 @@
  * @author marsman7 (you@domain.com)
  * @brief MQTT-Heartbeat is a Linux daemon that 
  *        periodically sends a status message via MQTT.
- * @version 1.0.2
+ * @version 
  * @date 2022-02-02
+ * 
+ * @headerfile mqtt-heartbeat.h
  * 
  * @copyright Copyright (c) 2022
  ***********************************************/
@@ -41,6 +43,10 @@
 #define LOG(level, msg, args...) if (level <= log_level) { fprintf(stderr, msg, level, ##args); }
 
 #define MQTT_MAX_MESSAGE_LENGTH 1024
+
+#ifndef VERSION_STR
+	#define VERSION_STR "0.0.0"
+#endif
 
 //-----------------------------------------------
 typedef void (*sighandler_t)(int);
@@ -241,6 +247,13 @@ char *parse_string(char *dst_string, const char *src_string)
 		{
 			ptag_value = secure_getenv("USER");
 			sub_string_length = strnlen(ptag_value, 63);
+			var_found = true;
+		}
+		else if (strncasecmp("version", src_string, sub_string_length) == 0) 
+		{
+			strncpy(tag_value, VERSION_STR, strnlen(VERSION_STR, sizeof(tag_value)-1)+1);
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
 			var_found = true;
 		}
 		else if (strncasecmp("status", src_string, sub_string_length) == 0) 
@@ -831,8 +844,8 @@ void init_signal_handler()
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	LOG(4, "<%d>MQTT-Heartbeat %d.%d.%d.%d started  [PID - %d] [PPID - %d]\n", 
-				MAJOR, MINOR, REVISION, BUILD, getpid(), getppid());
+	LOG(4, "<%d>MQTT-Heartbeat %s started  [PID - %d] [PPID - %d]\n", VERSION_STR, getpid(), getppid());
+				
 	if (getppid() == 1)
 	{
 		// run as daemon

@@ -107,6 +107,7 @@ Name | Beschreibung
 ----- | -----
 %hostname% | The name of this machine
 %user% | The user that run this daemon
+%version% | Version dieses Programms
 %status% | Status of this machine ('On' or 'Off')
 %loadavg_1% | Average CPU load of last 1 minute
 %uptime% | Time since the start of the machine in seconds

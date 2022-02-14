@@ -1,34 +1,53 @@
-# https://www.selflinux.org/selflinux/html/make02.html
+#/*******************************************/ /**
+# * @file makefile for mqtt-heartbeat
+# * @author marsman7 (you@domain.com)
+# * @brief MQTT-Heartbeat is a Linux daemon that 
+# *        periodically sends a status message via MQTT.
+# * @date 2022-02-02
+# * 
+# * @copyright Copyright (c) 2022
+# * 
+# * https://www.selflinux.org/selflinux/html/make02.html
+# * 
+# ***********************************************/
 
 NAME     = mqtt-heartbeat
 
-CC       = gcc
-CFLAGS   = -O2 -Wall
-LIBS     = -lconfig -lmosquitto
-INCS     = 
-#C_FILES   = foo.c bar.c
-C_FILES  = mqtt-heartbeat.c
-OBJECTS  = $(C_FILES:.c=.o)
-SRCDIR   = src/
-DSTDIR   = bin/
-DOCDIR   = doc/
-PREFIX	 = ./test/foo/bar
-BINDIR   = /usr/local/sbin/
-CFGDIR   = /etc/
+CC         = gcc
+LDFLAGS    = -O2 -Wall
+LIBS       = -lconfig -lmosquitto
+INCS       = 
+#C_FILES    = foo.c bar.c
+C_FILES    = mqtt-heartbeat.c
+OBJECTS    = $(C_FILES:.c=.o)
+SRCDIR     = src/
+DSTDIR     = bin/
+DOCDIR     = doc/
+PREFIX	   = ./test/foo/bar
+BINDIR     = /usr/local/sbin/
+CFGDIR     = /etc/
 SERVICEDIR = /etc/systemd/system/
 # SERVICEDIR = `pkg-config --variable=systemdsystemunitdir systemd`/
+VERSION_FILE = ./version
+VERSION_NUM  = `cat $(VERSION_FILE)`
+CFLAGS     = -DVERSION_STR=\"$(VERSION_NUM)\"
+DOXY_CONF  = doxyfile.conf
+
+GREEN    = \033[0;32m
+RED      = \033[1;31m
+COLOR_RESET = \033[0m
 
 .PHONY: all
 all: $(OBJECTS)
-	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(CFLAGS) -fdiagnostics-color=always
+	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(LDFLAGS) -fdiagnostics-color=always
+	@ echo "$(GREEN)----- Builded Version : $(VERSION_NUM) -----$(COLOR_RESET)"
 
-%.o: $(SRCDIR)%.c
+%.o: $(SRCDIR)%.c increment_build
 	@ mkdir -p $(DSTDIR)
 	$(CC) -c $< -o $(DSTDIR)$@ $(INCS) $(CFLAGS)
 
 .PHONY: clean
 clean:
-#	@ rm -f $(DSTDIR)*
 # remove all files under DSTDIR exept README.md
 	find $(DSTDIR) ! -name 'README.md' -type f -exec rm -f {} +
 
@@ -72,12 +91,18 @@ install-strip:
 deb:
 # Make a Debian package
 
+.PHONY: increment_build
+increment_build:
+	@if ! test -f $(VERSION_FILE); then echo "0.0.0.0" > $(VERSION_FILE); fi
+	@ ver=`cat $(VERSION_FILE)` && major=$${ver%.*} && build=$$(($${ver##*.} + 1)) \
+			&& echo "$${major}.$${build}" > $(VERSION_FILE)
+
 .PHONY: doc
 doc:
+	rm -r $(DOCDIR)html
 # the following command must be in a line with a && separator else
 # the command run not in the right directory
-	rm $(DOCDIR)html
-	cd $(DOCDIR) && doxygen doxyfile.conf
+	export PROJECT_NUMBER=$(VERSION_NUM) && cd $(DOCDIR) && doxygen $(DOXY_CONF)
 
 .PHONY: help
 help:
