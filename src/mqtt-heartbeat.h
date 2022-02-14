@@ -18,7 +18,7 @@ enum stat_t
 
 #define MAJOR       1
 #define MINOR       0
-#define REVISION    1
+#define REVISION    2
 #define BUILD       0
 
 const char *lock_socket_name = "/tmp/mqtt-heartbeat";
@@ -31,6 +31,7 @@ const char *status_off_string = "OFF";
 const char *status_on_string = "ON";
 const char *shutdown_poweroff = "--poweroff";
 const char *shutdown_reboot = "--reboot";
+const char *service_prefix = "service_";
 
 /*******************************************/ /**
  * @brief Presets if options not found in config file
