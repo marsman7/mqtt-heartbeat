@@ -11,8 +11,7 @@
 * ~~SIGHUP - Config neu laden~~
 * Linux Man Pages
 * ~~Log-level adjustable~~
-* Username and password for mqtt connection
-    - `mosquitto_username_pw_set(struct mosquitto *mosq, const char *username, const char *password);`
+* ~~Username and password for mqtt connection~~
 * Publish status / telemetry
     - ~~stat/# and tele/#~~
     - ~~On Status~~

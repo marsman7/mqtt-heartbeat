@@ -3,7 +3,7 @@
  * @author your name (you@domain.com)
  * @brief MQTT-Heartbeat is a Linux daemon that 
  *        periodically sends a status message via MQTT.
- * @version 0.1
+ * @version 1.0.1
  * @date 2022-02-02
  * 
  * @copyright Copyright (c) 2022
@@ -51,6 +51,7 @@ const char *shutdown_cmd = NULL;
 bool pause_flag = false; 	/*!< set it TRUE the process go to paused, send SIGCONT to continue the process */
 int keepalive = 30;
 struct mosquitto *mosq = NULL; //! mosquitto client instance
+bool connected = false;
 int status = STAT_ON;
 char *pub_parsed = NULL;
 
@@ -121,15 +122,18 @@ void clean_exit()
 	status = STAT_OFF;
 	if (mosq)
 	{
-		pub_parsed = parse_string(pub_parsed, stat_pub_message);
-		mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
-
-		// Wait of empty send queue
-		int i = 100;
-		while (mosquitto_want_write(mosq) && (i > 0))
+		if (connected)
 		{
-				usleep(100000); // sleep 100ms
-				i--;
+			pub_parsed = parse_string(pub_parsed, stat_pub_message);
+			mosquitto_publish(mosq, NULL, stat_pub_topic, strlen(pub_parsed), pub_parsed, qos, false);
+
+			// Wait of empty send queue
+			int i = 100;
+			while (mosquitto_want_write(mosq) && (i > 0))
+			{
+					usleep(100000); // sleep 100ms
+					i--;
+			}
 		}
 
 		// Terminate the connection to MQTT broker
@@ -258,7 +262,25 @@ char *parse_string(char *dst_string, const char *src_string)
 		{
 			double loadavgs[3];
 			getloadavg(loadavgs, 3);
-			sprintf(tag_value, "%d", (int)loadavgs[0]*1000);		
+			sprintf(tag_value, "%.0f", loadavgs[0]*1000);		
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
+			var_found = true;
+		}
+		else if (strncasecmp("uptime", src_string, sub_string_length) == 0)
+		{
+			struct sysinfo *info;
+			sysinfo(info);
+			sprintf(tag_value, "%ld", info->uptime);		
+			sub_string_length = strnlen(tag_value, sizeof(tag_value));
+			ptag_value = tag_value;
+			var_found = true;
+		}
+		else if (strncasecmp("freeram", src_string, sub_string_length) == 0)
+		{
+			struct sysinfo *info;
+			sysinfo(info);
+			sprintf(tag_value, "%ld", info->freeram);		
 			sub_string_length = strnlen(tag_value, sizeof(tag_value));
 			ptag_value = tag_value;
 			var_found = true;
@@ -320,12 +342,36 @@ char *alloc_string(char *dst_string, const char *src_string)
 	return dst_string;
 }
 
+/*******************************************/ /**
+ * @brief Get the config int object
+ * 
+ * @param config - A valid mosquitto instance.
+ * @param name - Name of option in config file.
+ * @param dst_int - Pointer to store the value.
+ * @param default_int - Preseted value if option not found in the file.
+ * @return int - On option succes return 'CONFIG_TRUE'. If the setting was 
+ *             not found or if the type of the value did not match, 
+ *             return CONFIG_FALSE. 
+ ***********************************************/
 int get_config_int(const config_t *config, const char *name, int *dst_int, int default_int)
 {
 	*dst_int = default_int;
 	return config_lookup_int(config, name, dst_int);
 }
 
+/*******************************************/ /**
+ * @brief Get the config string object and allocate memory
+ * 
+ * @param config - A valid mosquitto instance.
+ * @param name - Name of option in config file.
+ * @param dst_string - Pointer to pointer to store the string. For allocate
+ *             new memory the pointer will NULL.
+ * @param src_string - Preseted value if option not found in the file.
+ * @param to_pars - Flag for will parsing the string or not.
+ * @return int - On option succes return 'CONFIG_TRUE'. If the setting was 
+ *             not found or if the type of the value did not match, 
+ *             return CONFIG_FALSE. 
+ ***********************************************/
 int get_config_string(const config_t *config, const char *name, char **dst_string, const char *src_string, bool to_pars)
 {
 	int result = config_lookup_string(config, name, &src_string);
@@ -468,22 +514,33 @@ void init_mosquitto()
  ***********************************************/
 void connect_broker()
 {
+	int err = 0;
 	// Set the last will must be called before calling mosquitto_connect.
-	mosquitto_will_set(mosq, last_will_topic, 
+	if ( (err = mosquitto_will_set(mosq, last_will_topic, 
 			strlen(last_will_message), last_will_message, 
-			QOS_MOST_ONCE_DELIVERY, false);
+			QOS_MOST_ONCE_DELIVERY, false) ))
+	{
+		LOG(3, "<%d>ERROR: Last will cant't set : %d %s!\n", err, mosquitto_connack_string(err));
+	}
 
-	// mosquitto_username_pw_set(mosq, broker_user, preset_broker_password);
+	if (broker_user && broker_password)
+	{
+		if ((strnlen(broker_user, 128) > 0) && (strnlen(broker_password, 128) > 0))
+		{
+			// This is must be called before calling mosquitto_connect.
+			mosquitto_username_pw_set(mosq, broker_user, broker_password);
+		}
+	}
 
-	if (mosquitto_connect(mosq, mqtt_broker, port, keepalive))
+	if ( (err = mosquitto_connect(mosq, mqtt_broker, port, keepalive)) )
 	{
 		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
 		exit(EXIT_FAILURE);
 	}
 
-	if (mosquitto_loop_start(mosq))
+	if ( (err = mosquitto_loop_start(mosq)) )
 	{
-		LOG(3, "<%d>ERROR: Unable to connect MQTT-broker %s:%d\n", mqtt_broker, port);
+		LOG(3, "<%d>ERROR: Unable to start work loop\n");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -501,6 +558,8 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 {
 	if (!result)
 	{
+		connected = true;
+
 		LOG(5, "<%d>Connecting to MQTT-broker '%s:%d' success\n", mqtt_broker, port);
 		if (strlen(sub_topic) > 0)
 		{
@@ -518,8 +577,14 @@ void on_connect_callback(struct mosquitto *mosq, void *userdata, int result)
 	}
 	else
 	{
-		LOG(3, "<%d>ERROR : Connect to MQTT-broker failed : %s!\n",
-				mosquitto_connack_string(result));
+		connected = false;
+
+		LOG(3, "<%d>ERROR : Connect to MQTT-broker failed : %d %s!\n",
+				result, mosquitto_connack_string(result));
+		if (result == MOSQ_ERR_CONN_REFUSED) // not authorised
+		{
+			exit(EXIT_FAILURE);
+		}
 	}
 }
 
@@ -716,7 +781,7 @@ void init_signal_handler()
 int main(int argc, char *argv[])
 {
 	LOG(4, "<%d>MQTT-Heartbeat %d.%d.%d.%d started  [PID - %d] [PPID - %d]\n", 
-				MAJOR, MINOR, REVISION, COMPILATION, getpid(), getppid());
+				MAJOR, MINOR, REVISION, BUILD, getpid(), getppid());
 	if (getppid() == 1)
 	{
 		// run as daemon
@@ -834,7 +899,7 @@ int main(int argc, char *argv[])
 		if (pause_flag)
 			pause();
 
-		if ( (! stat_couter--) && (stat_interval > 0)) {
+		if (connected && (! stat_couter--) && (stat_interval > 0)) {
 			pub_parsed = parse_string(pub_parsed, stat_pub_message);
 			LOG(6, "<%d>Sending status ... \n");
 			//LOG(6, "<%d>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);
@@ -842,7 +907,7 @@ int main(int argc, char *argv[])
 			stat_couter = stat_interval;
 		}
 
-		if ( (! tele_couter--) && (tele_interval > 0)) {
+		if (connected && (! tele_couter--) && (tele_interval > 0)) {
 			pub_parsed = parse_string(pub_parsed, tele_pub_message);
 			LOG(6, "<%d>Sending telemetry ... \n");
 			//LOG(6, "<%d>Sending heartbeat ... %s : %s\n", pub_topic, pub_parsed);

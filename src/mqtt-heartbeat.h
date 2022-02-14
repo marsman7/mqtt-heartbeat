@@ -18,8 +18,8 @@ enum stat_t
 
 #define MAJOR       1
 #define MINOR       0
-#define REVISION    0
-#define COMPILATION 1
+#define REVISION    1
+#define BUILD       0
 
 const char *lock_socket_name = "/tmp/mqtt-heartbeat";
 
