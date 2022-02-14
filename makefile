@@ -68,10 +68,15 @@ uninstall:
 install-strip:
 # Installation mit ge-"strip"-ten Programmen (strip entfernt die Symboltabelle aus einem Programm) 
 
+.PHONY: deb
+deb:
+# Make a Debian package
+
 .PHONY: doc
 doc:
 # the following command must be in a line with a && separator else
 # the command run not in the right directory
+	rm $(DOCDIR)html
 	cd $(DOCDIR) && doxygen doxyfile.conf
 
 .PHONY: help

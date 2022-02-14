@@ -1,15 +1,12 @@
 /*******************************************/ /**
  * @file mqtt-heartbeat.c
- * @author your name (you@domain.com)
+ * @author marsman7 (you@domain.com)
  * @brief MQTT-Heartbeat is a Linux daemon that 
  *        periodically sends a status message via MQTT.
- * @version 1.0.1
+ * @version 1.0.2
  * @date 2022-02-02
  * 
  * @copyright Copyright (c) 2022
- * 
- * @link  https://mosquitto.org/api/files/mosquitto-h.html
- * 
  ***********************************************/
 #define _GNU_SOURCE
 
