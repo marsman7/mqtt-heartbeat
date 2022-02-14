@@ -1,4 +1,4 @@
-# MQTT-Heartbeat
+# MQTT-Heartbeat (Deutsch)
 
 [English version of this document](README.md)
 
