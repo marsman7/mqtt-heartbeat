@@ -3,7 +3,11 @@
  * @author marsman7 (you@domain.com)
  * @brief MQTT-Heartbeat is a Linux daemon that 
  *        periodically sends a status message via MQTT.
+<<<<<<< HEAD
  * @version see 'version' file
+=======
+ * @version 
+>>>>>>> eb53b69ac357d76f127275c16022213c702ad642
  * @date 2022-02-02
  * 
  * @headerfile mqtt-heartbeat.h
