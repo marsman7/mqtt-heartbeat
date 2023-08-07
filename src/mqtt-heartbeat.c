@@ -3,11 +3,7 @@
  * @author marsman7 (you@domain.com)
  * @brief MQTT-Heartbeat is a Linux daemon that 
  *        periodically sends a status message via MQTT.
-<<<<<<< HEAD
  * @version see 'version' file
-=======
- * @version 
->>>>>>> eb53b69ac357d76f127275c16022213c702ad642
  * @date 2022-02-02
  * 
  * @headerfile mqtt-heartbeat.h
@@ -752,7 +748,7 @@ void on_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
  ***********************************************/
 void signal_handler(int iSignal)
 {
-	// LOG(5, "<%d>signal : %s\n", strsignal(iSignal));
+	LOG(5, "<%d>signal : %s\n", strsignal(iSignal));
 
 	switch (iSignal)
 	{
@@ -848,7 +844,7 @@ void init_signal_handler()
  ***********************************************/
 int main(int argc, char *argv[])
 {
-	LOG(4, "<%d>MQTT-Heartbeat %s started  [PID - %d] [PPID - %d]\n", VERSION_STR, getpid(), getppid());
+	LOG(4, "<%d>MQTT-Heartbeat %s started  [PID %d] [PPID %d]\n", VERSION_STR, getpid(), getppid());
 				
 	if (getppid() == 1)
 	{
