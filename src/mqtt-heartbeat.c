@@ -245,7 +245,12 @@ char *parse_string(char *dst_string, const char *src_string)
 		} 
 		else if (strncasecmp("user", src_string, sub_string_length) == 0) 
 		{
+			// Is it run as a service, than is run it with user root and 
+			// 'secure_getenv("USER");' delivers NULL
 			ptag_value = secure_getenv("USER");
+			if (ptag_value == NULL) {
+				ptag_value = (char *)root_name;
+			}
 			sub_string_length = strnlen(ptag_value, 63);
 			var_found = true;
 		}
@@ -441,6 +446,8 @@ int get_config_int(const config_t *config, const char *name, int *dst_int, int d
 int get_config_string(const config_t *config, const char *name, char **dst_string, const char *src_string, bool to_pars)
 {
 	int result = config_lookup_string(config, name, &src_string);
+
+	LOG(6, "<%d>config lookup : %d %s = %s\n", result, name, src_string);
 
 	if (to_pars)
 	{
@@ -748,8 +755,6 @@ void on_publish_callback(struct mosquitto *mosq, void *userdata, int mid)
  ***********************************************/
 void signal_handler(int iSignal)
 {
-	LOG(5, "<%d>signal : %s\n", strsignal(iSignal));
-
 	switch (iSignal)
 	{
 	case SIGTERM:
@@ -852,7 +857,7 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
-		LOG(6, "<%d>Starting not as daemon by user ID %d privileges.\n", getuid());
+		LOG(5, "<%d>Starting not as daemon by user ID %d privileges.\n", getuid());
 	}
 
 	// Check command line arguments
@@ -984,6 +989,6 @@ int main(int argc, char *argv[])
 
 	// This code is never executed but when it is, the process 
 	// is cleanly terminated with the function specified in atexit().
-	LOG(6, "<%d>Finished ...\n");
+	LOG(5, "<%d>Finished ...\n");
 	return EXIT_SUCCESS;
 }

@@ -27,12 +27,13 @@ const char *status_on_string = "ON";
 const char *shutdown_poweroff = "--poweroff";
 const char *shutdown_reboot = "--reboot";
 const char *service_prefix = "service_";
+const char *root_name = "root";
 
 /*******************************************/ /**
  * @brief Presets if options not found in config file
  ***********************************************/
-int log_level = 6;
-int preset_log_level = 6;  // Logging before read config use ever this level
+int log_level = 4;
+int preset_log_level = 5;  // Logging before read config use ever this level
 int port = 0;
 int preset_port = 1883;
 int qos = 0;

@@ -42,9 +42,14 @@ all: $(OBJECTS)
 	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(LDFLAGS) -fdiagnostics-color=always
 	@ echo "$(GREEN)----- Builded Version : $(VERSION_NUM) -----$(COLOR_RESET)"
 
-%.o: $(SRCDIR)%.c increment_build
+%.o: $(SRCDIR)%.c 
 	@ mkdir -p $(DSTDIR)
 	$(CC) -c $< -o $(DSTDIR)$@ $(INCS) $(CFLAGS)
+
+.PHONY: build
+build: $(OBJECTS) increment_build
+	$(CC) -o $(DSTDIR)$(NAME) $(DSTDIR)$< $(LIBS) $(LDFLAGS) -fdiagnostics-color=always
+	@ echo "$(GREEN)----- Builded Version : $(VERSION_NUM) -----$(COLOR_RESET)"
 
 .PHONY: clean
 clean:
@@ -108,10 +113,11 @@ doc:
 help:
 	@ echo "Help"
 	@ echo ""
-	@ echo "make "
-	@ echo "make clean"
-	@ echo "make install"
-	@ echo "make uninstall"
-	@ echo "make fakeinstall"
-	@ echo "make doc"
-	@ echo "make help"
+	@ echo "make                build app"
+	@ echo "make build          increment version-build-number and build app"
+	@ echo "make clean          clean build directory"
+	@ echo "make install        install app and service"
+	@ echo "make uninstall      uninstall app and service"
+	@ echo "make fakeinstall    "
+	@ echo "make doc            create documentation"
+	@ echo "make help           show this help"
